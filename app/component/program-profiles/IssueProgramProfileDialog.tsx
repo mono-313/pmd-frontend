@@ -1,301 +1,759 @@
 "use client";
 
 import {
-  FormEvent,
   useEffect,
   useState,
 } from "react";
 
 import {
-  AlertCircle,
-  FilePlus2,
-  LoaderCircle,
+  Loader2,
   X,
 } from "lucide-react";
 
+import ProfileWizardStepper from
+"@/app/component/program-profiles/ProfileWizardStepper"
+
+
+import ProfileSpecificationsStep from
+  "@/app/component/program-profiles/steps/ProfileSpecificationsStep";
+
+import ProfileCrewStep from
+  "@/app/component/program-profiles/steps/ProfileCrewStep";
+
+import ProfileItemsStep from
+  "@/app/component/program-profiles/steps/ProfileItemsStep";
+
+import ProfileExpertsStep from
+  "@/app/component/program-profiles/steps/ProfileExpertsStep";
+
+import ProfileFinalReviewStep from
+  "@/app/component/program-profiles/steps/ProfileFinalReviewStep";
+
 import type {
-  ForecastResponse,
-} from "@/app/types/forecast";
+  PersonnelOption,
+  CrewActivityOption,
+} from "@/app/component/program-profiles/steps/ProfileCrewStep";
+
+import type {
+  ProfileExpertOption,
+  ProfileTopicAxisOption,
+} from "@/app/component/program-profiles/steps/ProfileExpertsStep";
+
+import type {
+  ProfileCrewMemberData,
+  ProfileItemData,
+  ProgramProfileWizardData,
+} from "@/app/types/program-profile";
 
 
-interface IssueProgramProfileDialogProps {
-  forecast:
-    ForecastResponse;
+interface IssueProfileDialogProps {
+  isOpen:
+    boolean;
+
+  forecastId:
+    string | null;
 
   onClose:
     () => void;
 
+  /*
+   * بعد از صدور کامل شناسنامه
+   */
   onIssued:
     (
-      forecastId: string
+      profileId: string
     ) => void;
 }
 
 
-interface ProfileFormData {
-  duration: string;
-
-  productionMethod: string;
-
-  occasion: string;
-
-  floorId: string;
-
-  floorName: string;
-
-  programDegreeId: string;
-
-  programDegreeName: string;
-
-  programStructureId: string;
-
-  programStructureName: string;
-
-  startTime: string;
-}
+type UnknownRecord = Record<
+  string,
+  unknown
+>;
 
 
-const initialFormData:
-  ProfileFormData = {
-  duration:
-    "01:00:00",
+const emptyWizardData:
+  ProgramProfileWizardData = {
+  specifications: {
+    forecastId: "",
 
-  productionMethod:
-    "",
+    planId: 0,
 
-  occasion:
-    "",
+    networkId: 0,
 
-  floorId:
-    "",
+    networkGroupId: 0,
 
-  floorName:
-    "",
+    programName: "",
 
-  programDegreeId:
-    "",
+    mainTopic: "",
 
-  programDegreeName:
-    "",
+    episodeNumber: null,
 
-  programStructureId:
-    "",
+    duration: "",
 
-  programStructureName:
-    "",
+    broadcastDate: "",
 
-  startTime:
-    "00:00:00",
+    broadcastDateJalali: "",
+
+    productionMethod: "",
+
+    occasion: "",
+
+    floorId: null,
+
+    floorName: "",
+
+    programDegreeId: null,
+
+    programDegreeName: "",
+
+    programStructureId: null,
+
+    programStructureName: "",
+
+    startTime: "",
+
+    hasExpert: false,
+  },
+
+  crewMembers: [],
+
+  items: [],
+
+  experts: [],
 };
 
 
-export default function IssueProgramProfileDialog({
-  forecast,
+export default function IssueProfileDialog({
+  isOpen,
+  forecastId,
   onClose,
   onIssued,
-}: IssueProgramProfileDialogProps) {
+}: IssueProfileDialogProps) {
   const [
-    formData,
-    setFormData,
-  ] = useState<ProfileFormData>(
-    initialFormData
-  );
+    currentStep,
+    setCurrentStep,
+  ] = useState(1);
 
   const [
-    isSubmitting,
-    setIsSubmitting,
+    wizardData,
+    setWizardData,
+  ] =
+    useState<ProgramProfileWizardData>(
+      emptyWizardData
+    );
+
+  const [
+    personnelOptions,
+    setPersonnelOptions,
+  ] =
+    useState<PersonnelOption[]>(
+      []
+    );
+
+  const [
+    activityOptions,
+    setActivityOptions,
+  ] =
+    useState<CrewActivityOption[]>(
+      []
+    );
+
+  const [
+    availableExperts,
+    setAvailableExperts,
+  ] =
+    useState<ProfileExpertOption[]>(
+      []
+    );
+
+  const [
+    topicAxes,
+    setTopicAxes,
+  ] =
+    useState<
+      ProfileTopicAxisOption[]
+    >([]);
+
+  const [
+    isLoading,
+    setIsLoading,
   ] = useState(false);
 
   const [
-    error,
-    setError,
+    loadingError,
+    setLoadingError,
+  ] = useState("");
+
+  const [
+    expertsError,
+    setExpertsError,
   ] = useState("");
 
 
   /*
-   * جلوگیری از Scroll صفحه زیر Popup
+   * جلوگیری از Scroll صفحه زیر Modal
    */
   useEffect(() => {
-    const previousOverflow =
-      document.body.style.overflow;
-
-    document.body.style.overflow =
-      "hidden";
-
-    return () => {
-      document.body.style.overflow =
-        previousOverflow;
-    };
-  }, []);
-
-
-  function updateField(
-    fieldName: keyof ProfileFormData,
-    value: string
-  ) {
-    setFormData(
-      (previous) => ({
-        ...previous,
-
-        [fieldName]:
-          value,
-      })
-    );
-  }
-
-
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
-
-    setError("");
-
-    const validationMessage =
-      validateForm(
-        formData
-      );
-
-    if (validationMessage) {
-      setError(
-        validationMessage
-      );
-
+    if (!isOpen) {
       return;
     }
 
-    /*
-     * این اطلاعات مستقیماً از همان
-     * Forecast انتخاب‌شده گرفته می‌شوند.
-     */
-    const requestBody = {
-      forecastId:
-        forecast.id,
 
-      planId:
-        forecast.planId,
+    const previousOverflow =
+      document.body.style
+        .overflow;
 
-      networkId:
-        forecast.networkId,
 
-      networkGroupId:
-        forecast.networkGroupId,
+    document.body.style
+      .overflow = "hidden";
 
-      duration:
-        normalizeTime(
-          formData.duration
-        ),
 
-      broadcastDate:
-        normalizeDigits(
-          forecast.broadcastDate
-        ),
-
-      productionMethod:
-        formData.productionMethod
-          .trim(),
-
-      occasion:
-        formData.occasion
-          .trim(),
-
-      floorId:
-        Number(
-          formData.floorId
-        ),
-
-      floorName:
-        formData.floorName
-          .trim(),
-
-      programDegreeId:
-        Number(
-          formData.programDegreeId
-        ),
-
-      programDegreeName:
-        formData.programDegreeName
-          .trim(),
-
-      programStructureId:
-        Number(
-          formData.programStructureId
-        ),
-
-      programStructureName:
-        formData.programStructureName
-          .trim(),
-
-      startTime:
-        normalizeTime(
-          formData.startTime
-        ),
-
-      /*
-       * طبق مستند ارسال این دو آرایه
-       * الزامی است، اما می‌توانند خالی باشند.
-       */
-      crewMembers:
-        [],
-
-      items:
-        [],
+    return () => {
+      document.body.style
+        .overflow =
+        previousOverflow;
     };
+  }, [isOpen]);
 
-    try {
-      setIsSubmitting(true);
 
-      const response =
-        await fetch(
-          "/api/program-profiles/issue",
-          {
-            method:
-              "POST",
-
-            headers: {
-              Accept:
-                "application/json",
-
-              "Content-Type":
-                "application/json",
-            },
-
-            body:
-              JSON.stringify(
-                requestBody
-              ),
-          }
-        );
-
-      const responseText =
-        await response.text();
-
-      const responseData =
-        parseJsonResponse(
-          responseText
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          getErrorMessage(
-            responseData
-          ) ??
-            `صدور شناسنامه انجام نشد. کد پاسخ: ${response.status}`
-        );
-      }
-
-      onIssued(
-        forecast.id
-      );
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "صدور شناسنامه انجام نشد."
-      );
-    } finally {
-      setIsSubmitting(false);
+  /*
+   * دریافت اطلاعات Wizard
+   */
+  useEffect(() => {
+    if (
+      !isOpen ||
+      !forecastId
+    ) {
+      return;
     }
+
+
+    let cancelled =
+      false;
+
+
+    async function loadWizardData() {
+      try {
+        setIsLoading(true);
+
+        setLoadingError("");
+
+        setExpertsError("");
+
+        setCurrentStep(1);
+
+        setWizardData(
+          emptyWizardData
+        );
+
+
+        /*
+         * مرحله اول دریافت:
+         *
+         * Forecast برای planId،
+         * networkId، موضوع، قسمت،
+         * کارشناسان و محورهای موضوعی
+         */
+        const forecastResponse =
+          await fetchJson(
+            `/api/forecasts/${encodeURIComponent(
+              forecastId
+            )}`
+          );
+
+
+        const forecast =
+          extractObject(
+            forecastResponse,
+            [
+              "forecast",
+              "data",
+              "result",
+            ]
+          );
+
+
+        if (!forecast) {
+          throw new Error(
+            "اطلاعات پیش‌بینی در پاسخ سرور پیدا نشد."
+          );
+        }
+
+
+        const planId =
+          getNumber(
+            forecast,
+            [
+              "planId",
+              "PlanId",
+            ]
+          );
+
+
+        const networkId =
+          getNumber(
+            forecast,
+            [
+              "networkId",
+              "NetworkId",
+            ]
+          );
+
+
+        const networkGroupId =
+          getNumber(
+            forecast,
+            [
+              "networkGroupId",
+              "NetworkGroupId",
+            ]
+          );
+
+
+        if (
+          planId === null ||
+          planId <= 0
+        ) {
+          throw new Error(
+            "شناسه برنامه در اطلاعات پیش‌بینی معتبر نیست."
+          );
+        }
+
+
+        if (
+          networkId === null ||
+          networkId <= 0
+        ) {
+          throw new Error(
+            "شناسه شبکه در اطلاعات پیش‌بینی معتبر نیست."
+          );
+        }
+
+
+        if (
+          networkGroupId ===
+            null ||
+          networkGroupId <= 0
+        ) {
+          throw new Error(
+            "شناسه گروه برنامه‌ساز در اطلاعات پیش‌بینی معتبر نیست."
+          );
+        }
+
+
+        /*
+         * دریافت هم‌زمان اطلاعات مستقل
+         */
+        const [
+          planDetailResponse,
+          crewResponse,
+          itemsResponse,
+          activitiesResponse,
+          expertsResponse,
+        ] =
+          await Promise.all([
+            fetchJson(
+              `/api/base-info/plans/${planId}/detail`
+            ),
+
+            fetchJson(
+              `/api/base-info/plans/${planId}/crew`
+            ),
+
+            fetchJson(
+              `/api/base-info/plans/${planId}/items`
+            ),
+
+            fetchJson(
+              "/api/base-info/activity-types"
+            ),
+
+            fetchJson(
+              "/api/experts?pageNumber=1&pageSize=200&isActive=true"
+            ),
+          ]);
+
+
+        /*
+         * پرسنل بعد از مشخص‌شدن
+         * networkId دریافت می‌شود.
+         */
+        let personnelResponse:
+          unknown = null;
+
+
+        try {
+          personnelResponse =
+            await fetchJson(
+              `/api/base-info/personnel?networkId=${networkId}`
+            );
+        } catch (personnelError) {
+          /*
+           * نبود فهرست پرسنل نباید
+           * کل Wizard را متوقف کند.
+           *
+           * عوامل اولیه همچنان نمایش
+           * داده می‌شوند.
+           */
+          console.error(
+            "Personnel request error:",
+            personnelError
+          );
+        }
+
+
+        const planDetail =
+          extractObject(
+            planDetailResponse,
+            [
+              "data",
+              "detail",
+              "planDetail",
+              "result",
+            ]
+          ) ?? {};
+
+
+        const normalizedCrew =
+          normalizeCrewMembers(
+            extractArray(
+              crewResponse,
+              [
+                "items",
+                "crewMembers",
+                "data",
+                "result",
+              ]
+            )
+          );
+
+
+        const normalizedItems =
+          normalizeItems(
+            extractArray(
+              itemsResponse,
+              [
+                "items",
+                "planItems",
+                "data",
+                "result",
+              ]
+            )
+          );
+
+
+        const normalizedActivities =
+          normalizeSimpleOptions(
+            extractArray(
+              activitiesResponse,
+              [
+                "items",
+                "activityTypes",
+                "data",
+                "result",
+              ]
+            )
+          );
+
+
+        const normalizedPersonnel =
+          normalizeSimpleOptions(
+            extractArray(
+              personnelResponse,
+              [
+                "items",
+                "personnel",
+                "data",
+                "result",
+              ]
+            )
+          );
+
+
+        const normalizedExperts =
+          normalizeExperts(
+            extractArray(
+              expertsResponse,
+              [
+                "items",
+                "experts",
+                "data",
+                "result",
+              ]
+            )
+          );
+
+
+        const normalizedAxes =
+          normalizeTopicAxes(
+            forecast.topicAxes ??
+            forecast.TopicAxes
+          );
+
+
+        const broadcastDate =
+          getString(
+            forecast,
+            [
+              "broadcastDate",
+              "BroadcastDate",
+            ]
+          );
+
+
+        /*
+         * ساخت FormData مرکزی
+         */
+        const nextWizardData:
+          ProgramProfileWizardData = {
+          specifications: {
+            forecastId,
+
+            planId,
+
+            networkId,
+
+            networkGroupId,
+
+            programName:
+              getString(
+                planDetail,
+                [
+                  "programName",
+                  "ProgramName",
+
+                  "planName",
+                  "PlanName",
+
+                  "title",
+                  "Title",
+
+                  "text",
+                  "Text",
+                ]
+              ) ||
+              getString(
+                forecast,
+                [
+                  "programName",
+                  "planName",
+                ]
+              ),
+
+            mainTopic:
+              getString(
+                forecast,
+                [
+                  "mainTopic",
+                  "MainTopic",
+                ]
+              ),
+
+            episodeNumber:
+              getNumber(
+                forecast,
+                [
+                  "episodeNumber",
+                  "EpisodeNumber",
+                ]
+              ),
+
+            duration:
+              normalizeTimeSpan(
+                getString(
+                  planDetail,
+                  [
+                    "duration",
+                    "Duration",
+
+                    "programDuration",
+                    "ProgramDuration",
+                  ]
+                )
+              ),
+
+            broadcastDate,
+
+            broadcastDateJalali:
+              formatJalaliDate(
+                broadcastDate
+              ),
+
+            productionMethod:
+              getString(
+                planDetail,
+                [
+                  "productionMethod",
+                  "ProductionMethod",
+
+                  "productionType",
+                  "ProductionType",
+                ]
+              ),
+
+            occasion:
+              getString(
+                planDetail,
+                [
+                  "occasion",
+                  "Occasion",
+                ]
+              ) ||
+              "بدون مناسبت خاص",
+
+            floorId:
+              getNumber(
+                planDetail,
+                [
+                  "floorId",
+                  "FloorId",
+                ]
+              ),
+
+            floorName:
+              getString(
+                planDetail,
+                [
+                  "floorName",
+                  "FloorName",
+                ]
+              ),
+
+            programDegreeId:
+              getNumber(
+                planDetail,
+                [
+                  "programDegreeId",
+                  "ProgramDegreeId",
+                ]
+              ),
+
+            programDegreeName:
+              getString(
+                planDetail,
+                [
+                  "programDegreeName",
+                  "ProgramDegreeName",
+                ]
+              ),
+
+            programStructureId:
+              getNumber(
+                planDetail,
+                [
+                  "programStructureId",
+                  "ProgramStructureId",
+                ]
+              ),
+
+            programStructureName:
+              getString(
+                planDetail,
+                [
+                  "programStructureName",
+                  "ProgramStructureName",
+                ]
+              ),
+
+            startTime:
+              normalizeClockTime(
+                getString(
+                  planDetail,
+                  [
+                    "startTime",
+                    "StartTime",
+
+                    "broadcastTime",
+                    "BroadcastTime",
+                  ]
+                )
+              ),
+
+            hasExpert:
+              getBoolean(
+                forecast,
+                [
+                  "hasExpert",
+                  "HasExpert",
+                ]
+              ),
+          },
+
+          crewMembers:
+            normalizedCrew,
+
+          items:
+            normalizedItems,
+
+          /*
+           * کارشناس به محور موضوعی،
+           * مدت و نحوه حضور نیاز دارد.
+           * این اطلاعات در Forecast وجود
+           * ندارد؛ بنابراین کاربر در مرحله
+           * چهارم آن را تکمیل می‌کند.
+           */
+          experts: [],
+        };
+
+
+        if (!cancelled) {
+          setWizardData(
+            nextWizardData
+          );
+
+          setPersonnelOptions(
+            mergeCrewWithPersonnel(
+              normalizedCrew,
+              normalizedPersonnel
+            )
+          );
+
+          setActivityOptions(
+            mergeCrewWithActivities(
+              normalizedCrew,
+              normalizedActivities
+            )
+          );
+
+          setAvailableExperts(
+            normalizedExperts
+          );
+
+          setTopicAxes(
+            normalizedAxes
+          );
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setLoadingError(
+            loadError instanceof Error
+              ? loadError.message
+              : "دریافت اطلاعات شناسنامه انجام نشد."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+
+    void loadWizardData();
+
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isOpen,
+    forecastId,
+  ]);
+
+
+  if (!isOpen) {
+    return null;
   }
 
 
@@ -303,717 +761,1121 @@ export default function IssueProgramProfileDialog({
     <div
       className="
         fixed inset-0
-        z-[100]
+        z-[70]
         flex
         items-center
         justify-center
         bg-black/50
-        p-4
+        p-3
+        sm:p-6
       "
       dir="rtl"
-      role="dialog"
-      aria-modal="true"
     >
       <div
         className="
-          max-h-[92vh]
+          flex
+          max-h-[94vh]
           w-full
-          max-w-5xl
-          overflow-y-auto
+          max-w-7xl
+          flex-col
+          overflow-hidden
           rounded-2xl
-          bg-white
+          bg-gray-50
           shadow-2xl
         "
       >
+        {/* هدر Modal */}
         <header
           className="
-            sticky top-0
-            z-10
             flex
+            shrink-0
             items-start
             justify-between
+            gap-4
             border-b
             border-gray-200
             bg-white
-            px-6 py-5
+            px-5 py-4
           "
         >
           <div>
-            <div
+            <h2
               className="
-                flex
-                items-center
-                gap-2
+                text-xl
+                font-bold
+                text-gray-800
               "
             >
-              <FilePlus2
-                size={23}
-                className="text-[#007fcf]"
-              />
-
-              <h2
-                className="
-                  text-xl
-                  font-bold
-                  text-gray-800
-                "
-              >
-                تبدیل موضوع به شناسنامه
-              </h2>
-            </div>
+              صدور شناسنامه برنامه
+            </h2>
 
             <p
               className="
-                mt-2
+                mt-1
                 text-sm
                 text-gray-500
               "
             >
-              {forecast.mainTopic}
+              اطلاعات شناسنامه را مرحله‌به‌مرحله بررسی و تکمیل کنید.
             </p>
           </div>
 
+
           <button
             type="button"
-            onClick={onClose}
+            onClick={
+              onClose
+            }
             disabled={
-              isSubmitting
+              isLoading
             }
             className="
               rounded-lg
               p-2
-              text-gray-500
+              text-gray-400
               transition
               hover:bg-gray-100
+              hover:text-gray-700
+              disabled:opacity-40
             "
-            aria-label="بستن"
+            aria-label="بستن پنجره"
           >
             <X size={21} />
           </button>
         </header>
 
 
-        <form
-          onSubmit={
-            handleSubmit
-          }
+        {/* محتوای Scrollable */}
+        <div
+          className="
+            flex-1
+            overflow-y-auto
+            px-4 py-6
+            sm:px-6
+          "
         >
-          <div
-            className="
-              space-y-6
-              p-6
-            "
-          >
-            {/* اطلاعات Forecast */}
-            <section
+          {isLoading ? (
+            <div
               className="
-                rounded-xl
-                border
-                border-blue-200
-                bg-blue-50
-                p-4
+                flex
+                min-h-80
+                flex-col
+                items-center
+                justify-center
+                gap-4
+                text-gray-500
               "
             >
-              <div
+              <Loader2
+                size={32}
                 className="
-                  grid
-                  grid-cols-1
-                  gap-4
+                  animate-spin
+                  text-[#007fcf]
+                "
+              />
+
+              <p>
+                در حال دریافت اطلاعات برنامه...
+              </p>
+            </div>
+          ) : loadingError ? (
+            <div
+              className="
+                mx-auto
+                max-w-2xl
+                rounded-xl
+                border border-red-200
+                bg-red-50
+                p-6
+                text-red-700
+              "
+            >
+              <h3 className="font-bold">
+                دریافت اطلاعات امکان‌پذیر نیست
+              </h3>
+
+              <p
+                className="
+                  mt-2
                   text-sm
-                  md:grid-cols-2
-                  lg:grid-cols-4
+                  leading-7
                 "
               >
-                <InfoField
-                  label="شناسه برنامه"
-                  value={
-                    forecast.planId
+                {loadingError}
+              </p>
+
+              <button
+                type="button"
+                onClick={
+                  onClose
+                }
+                className="
+                  mt-5
+                  rounded-lg
+                  border border-red-300
+                  bg-white
+                  px-4 py-2
+                  text-sm
+                "
+              >
+                بستن
+              </button>
+            </div>
+          ) : (
+            <>
+              <ProfileWizardStepper
+                currentStep={
+                  currentStep
+                }
+              />
+
+
+              {currentStep === 1 && (
+                <ProfileSpecificationsStep
+                  data={
+                    wizardData
+                      .specifications
+                  }
+                  onChange={(
+                    specifications
+                  ) =>
+                    setWizardData(
+                      (previous) => ({
+                        ...previous,
+
+                        specifications,
+                      })
+                    )
+                  }
+                  onNext={() =>
+                    setCurrentStep(2)
                   }
                 />
+              )}
 
-                <InfoField
-                  label="شماره قسمت"
-                  value={
-                    forecast.episodeNumber
+
+              {currentStep === 2 && (
+                <ProfileCrewStep
+                  crewMembers={
+                    wizardData
+                      .crewMembers
+                  }
+                  personnelOptions={
+                    personnelOptions
+                  }
+                  activityOptions={
+                    activityOptions
+                  }
+                  onChange={(
+                    crewMembers
+                  ) =>
+                    setWizardData(
+                      (previous) => ({
+                        ...previous,
+
+                        crewMembers,
+                      })
+                    )
+                  }
+                  onBack={() =>
+                    setCurrentStep(1)
+                  }
+                  onNext={() =>
+                    setCurrentStep(3)
                   }
                 />
+              )}
 
-                <InfoField
-                  label="شناسه شبکه"
-                  value={
-                    forecast.networkId
+
+              {currentStep === 3 && (
+                <ProfileItemsStep
+                  items={
+                    wizardData.items
+                  }
+                  onChange={(
+                    items
+                  ) =>
+                    setWizardData(
+                      (previous) => ({
+                        ...previous,
+
+                        items,
+                      })
+                    )
+                  }
+                  onBack={() =>
+                    setCurrentStep(2)
+                  }
+                  onNext={() =>
+                    setCurrentStep(4)
                   }
                 />
+              )}
 
-                <InfoField
-                  label="گروه برنامه‌ساز"
-                  value={
-                    forecast.networkGroupId
+
+              {currentStep === 4 && (
+                <ProfileExpertsStep
+                  hasExpert={
+                    wizardData
+                      .specifications
+                      .hasExpert
+                  }
+                  experts={
+                    wizardData.experts
+                  }
+                  availableExperts={
+                    availableExperts
+                  }
+                  topicAxes={
+                    topicAxes
+                  }
+                  expertsError={
+                    expertsError
+                  }
+                  onChange={(
+                    experts
+                  ) => {
+                    setExpertsError("");
+
+                    setWizardData(
+                      (previous) => ({
+                        ...previous,
+
+                        experts,
+                      })
+                    );
+                  }}
+                  onBack={() =>
+                    setCurrentStep(3)
+                  }
+                  onNext={() =>
+                    setCurrentStep(5)
                   }
                 />
+              )}
 
-                <InfoField
-                  label="موضوع"
-                  value={
-                    forecast.mainTopic
+
+              {currentStep === 5 && (
+                <ProfileFinalReviewStep
+                  wizardData={
+                    wizardData
                   }
-                />
-
-                <InfoField
-                  label="تاریخ پخش"
-                  value={
-                    formatPersianDate(
-                      forecast.broadcastDate
+                  onBack={() =>
+                    setCurrentStep(4)
+                  }
+                  onEditStep={(
+                    step
+                  ) =>
+                    setCurrentStep(step)
+                  }
+                  onSuccess={(
+                    profileId
+                  ) =>
+                    onIssued(
+                      profileId
                     )
                   }
                 />
-              </div>
-            </section>
-
-
-            {error && (
-              <div
-                role="alert"
-                className="
-                  flex
-                  items-start
-                  gap-3
-                  rounded-xl
-                  border
-                  border-red-200
-                  bg-red-50
-                  p-4
-                  text-red-700
-                "
-              >
-                <AlertCircle
-                  size={21}
-                  className="shrink-0"
-                />
-
-                {error}
-              </div>
-            )}
-
-
-            {/* فرم */}
-            <section
-              className="
-                grid
-                grid-cols-1
-                gap-5
-                md:grid-cols-2
-              "
-            >
-              <FormInput
-                label="مدت برنامه"
-                value={
-                  formData.duration
-                }
-                placeholder="01:00:00"
-                direction="ltr"
-                onChange={(value) =>
-                  updateField(
-                    "duration",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="ساعت شروع برنامه"
-                value={
-                  formData.startTime
-                }
-                placeholder="20:00:00"
-                direction="ltr"
-                onChange={(value) =>
-                  updateField(
-                    "startTime",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="نحوه تولید"
-                value={
-                  formData.productionMethod
-                }
-                placeholder="مثلاً زنده"
-                onChange={(value) =>
-                  updateField(
-                    "productionMethod",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="مناسبت"
-                value={
-                  formData.occasion
-                }
-                placeholder="مثلاً بدون مناسبت خاص"
-                onChange={(value) =>
-                  updateField(
-                    "occasion",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="شناسه طبقه برنامه"
-                type="number"
-                value={
-                  formData.floorId
-                }
-                onChange={(value) =>
-                  updateField(
-                    "floorId",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="نام طبقه برنامه"
-                value={
-                  formData.floorName
-                }
-                onChange={(value) =>
-                  updateField(
-                    "floorName",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="شناسه درجه برنامه"
-                type="number"
-                value={
-                  formData.programDegreeId
-                }
-                onChange={(value) =>
-                  updateField(
-                    "programDegreeId",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="نام درجه برنامه"
-                value={
-                  formData.programDegreeName
-                }
-                onChange={(value) =>
-                  updateField(
-                    "programDegreeName",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="شناسه ساختار برنامه"
-                type="number"
-                value={
-                  formData.programStructureId
-                }
-                onChange={(value) =>
-                  updateField(
-                    "programStructureId",
-                    value
-                  )
-                }
-              />
-
-              <FormInput
-                label="نام ساختار برنامه"
-                value={
-                  formData.programStructureName
-                }
-                onChange={(value) =>
-                  updateField(
-                    "programStructureName",
-                    value
-                  )
-                }
-              />
-            </section>
-
-            <div
-              className="
-                rounded-xl
-                border
-                border-amber-200
-                bg-amber-50
-                p-4
-                text-sm
-                text-amber-700
-              "
-            >
-              عوامل و آیتم‌های برنامه در این نسخه به‌صورت
-              آرایه خالی ارسال می‌شوند؛ طبق مستند Backend
-              این دو فیلد الزامی هستند ولی می‌توانند خالی باشند.
-            </div>
-          </div>
-
-
-          <footer
-            className="
-              sticky bottom-0
-              flex
-              items-center
-              justify-end
-              gap-3
-              border-t
-              border-gray-200
-              bg-white
-              px-6 py-4
-            "
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={
-                isSubmitting
-              }
-              className="
-                rounded-lg
-                border
-                border-gray-300
-                px-5 py-2.5
-                font-semibold
-                text-gray-700
-                transition
-                hover:bg-gray-50
-                disabled:opacity-50
-              "
-            >
-              انصراف
-            </button>
-
-            <button
-              type="submit"
-              disabled={
-                isSubmitting
-              }
-              className="
-                flex
-                min-w-44
-                items-center
-                justify-center
-                gap-2
-                rounded-lg
-                bg-green-600
-                px-5 py-2.5
-                font-bold
-                text-white
-                transition
-                hover:bg-green-700
-                disabled:cursor-not-allowed
-                disabled:opacity-60
-              "
-            >
-              {isSubmitting ? (
-                <>
-                  <LoaderCircle
-                    size={19}
-                    className="animate-spin"
-                  />
-
-                  در حال ثبت...
-                </>
-              ) : (
-                <>
-                  <FilePlus2
-                    size={19}
-                  />
-
-                  ثبت شناسنامه
-                </>
               )}
-            </button>
-          </footer>
-        </form>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 
-function FormInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  direction = "rtl",
-}: {
-  label: string;
+/*
+ * Fetch عمومی با مدیریت پاسخ
+ * خالی و غیر JSON
+ */
+async function fetchJson(
+  url: string
+): Promise<unknown> {
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
 
-  value: string;
+        headers: {
+          Accept:
+            "application/json",
+        },
 
-  onChange:
-    (value: string) => void;
+        cache:
+          "no-store",
+      }
+    );
 
-  placeholder?: string;
 
-  type?: "text" | "number";
+  const responseText =
+    await response.text();
 
-  direction?: "rtl" | "ltr";
-}) {
-  return (
-    <label className="block">
-      <span
-        className="
-          mb-2
-          block
-          text-sm
-          font-semibold
-          text-gray-700
-        "
-      >
-        {label}
 
-        <span className="mr-1 text-red-500">
-          *
-        </span>
-      </span>
+  const responseData =
+    parseJsonResponse(
+      responseText
+    );
 
-      <input
-        type={type}
-        min={
-          type === "number"
-            ? 1
-            : undefined
-        }
-        value={value}
-        placeholder={placeholder}
-        dir={direction}
-        onChange={(event) =>
-          onChange(
-            event.target.value
-          )
-        }
-        className="
-          h-11
-          w-full
-          rounded-lg
-          border
-          border-gray-300
-          px-3
-          outline-none
-          transition
-          focus:border-[#007fcf]
-          focus:ring-2
-          focus:ring-blue-100
-        "
-      />
-    </label>
-  );
+
+  if (!response.ok) {
+    throw new Error(
+      getErrorMessage(
+        responseData
+      ) ??
+      (
+        "دریافت اطلاعات انجام نشد. " +
+        "کد پاسخ: " +
+        response.status
+      )
+    );
+  }
+
+
+  return responseData;
 }
 
 
-function InfoField({
-  label,
-  value,
-}: {
-  label: string;
-
-  value:
-    | string
-    | number
-    | null
-    | undefined;
-}) {
-  return (
-    <div>
-      <p className="text-gray-500">
-        {label}
-      </p>
-
-      <p
-        className="
-          mt-1
-          font-bold
-          text-gray-800
-        "
-      >
-        {value ?? "—"}
-      </p>
-    </div>
-  );
-}
-
-
-function validateForm(
-  value: ProfileFormData
-): string | null {
-  if (
-    !isTimeSpan(
-      value.duration
-    )
-  ) {
-    return "مدت برنامه باید با فرمت hh:mm:ss وارد شود.";
+/*
+ * استخراج یک Object از پاسخ مستقیم
+ * یا پاسخ Wrapper
+ */
+function extractObject(
+  value: unknown,
+  fields: string[]
+): UnknownRecord | null {
+  if (!isRecord(value)) {
+    return null;
   }
 
+
+  /*
+   * پاسخ مستقیم Forecast
+   */
   if (
-    !isTimeSpan(
-      value.startTime
-    )
+    typeof value.id ===
+      "string" ||
+    typeof value.planId ===
+      "number"
   ) {
-    return "ساعت شروع باید با فرمت hh:mm:ss وارد شود.";
+    return value;
   }
 
-  if (
-    !value.productionMethod.trim()
-  ) {
-    return "نحوه تولید الزامی است.";
+
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (isRecord(fieldValue)) {
+      /*
+       * پشتیبانی از:
+       * data: {
+       *   forecast: {}
+       * }
+       */
+      if (
+        isRecord(
+          fieldValue.forecast
+        )
+      ) {
+        return fieldValue
+          .forecast;
+      }
+
+
+      return fieldValue;
+    }
   }
 
-  if (
-    !value.occasion.trim()
-  ) {
-    return "مناسبت الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.floorId
-    )
-  ) {
-    return "شناسه طبقه برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.floorName.trim()
-  ) {
-    return "نام طبقه برنامه الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.programDegreeId
-    )
-  ) {
-    return "شناسه درجه برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.programDegreeName.trim()
-  ) {
-    return "نام درجه برنامه الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.programStructureId
-    )
-  ) {
-    return "شناسه ساختار برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.programStructureName.trim()
-  ) {
-    return "نام ساختار برنامه الزامی است.";
-  }
 
   return null;
 }
 
 
-function isPositiveInteger(
-  value: string
-): boolean {
-  const numberValue =
-    Number(
-      normalizeDigits(value)
-    );
+/*
+ * استخراج آرایه از پاسخ‌های مختلف
+ */
+function extractArray(
+  value: unknown,
+  fields: string[]
+): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
 
-  return (
-    Number.isInteger(
-      numberValue
-    ) &&
-    numberValue > 0
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (Array.isArray(fieldValue)) {
+      return fieldValue;
+    }
+
+
+    if (isRecord(fieldValue)) {
+      const nestedItems =
+        fieldValue.items ??
+        fieldValue.Items;
+
+
+      if (
+        Array.isArray(
+          nestedItems
+        )
+      ) {
+        return nestedItems;
+      }
+    }
+  }
+
+
+  return [];
+}
+
+
+/*
+ * تبدیل عوامل به ساختار داخلی
+ */
+function normalizeCrewMembers(
+  items: unknown[]
+): ProfileCrewMemberData[] {
+  return items.flatMap(
+    (item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+
+
+      const personnelId =
+        getNumber(
+          item,
+          [
+            "personnelId",
+            "PersonnelId",
+
+            "personelId",
+            "PersonelId",
+
+            "id",
+            "Id",
+          ]
+        );
+
+
+      const personnelName =
+        getString(
+          item,
+          [
+            "personnelName",
+            "PersonnelName",
+
+            "personelName",
+            "PersonelName",
+
+            "name",
+            "Name",
+          ]
+        );
+
+
+      const activityTypeId =
+        getNumber(
+          item,
+          [
+            "activityTypeId",
+            "ActivityTypeId",
+
+            "jobId",
+            "JobId",
+          ]
+        );
+
+
+      const activityTypeName =
+        getString(
+          item,
+          [
+            "activityTypeName",
+            "ActivityTypeName",
+
+            "jobName",
+            "JobName",
+
+            "activityName",
+            "ActivityName",
+          ]
+        );
+
+
+      if (
+        personnelId === null ||
+        !personnelName ||
+        activityTypeId === null ||
+        !activityTypeName
+      ) {
+        return [];
+      }
+
+
+      return [
+        {
+          personnelId,
+
+          personnelName,
+
+          activityTypeId,
+
+          activityTypeName,
+
+          isPresent:
+            getBoolean(
+              item,
+              [
+                "isPresent",
+                "IsPresent",
+              ]
+            ),
+        },
+      ];
+    }
   );
 }
 
 
-function isTimeSpan(
-  value: string
+/*
+ * تبدیل آیتم‌های برنامه
+ */
+function normalizeItems(
+  items: unknown[]
+): ProfileItemData[] {
+  return items.flatMap(
+    (item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+
+
+      const itemName =
+        getString(
+          item,
+          [
+            "itemName",
+            "ItemName",
+
+            "name",
+            "Name",
+
+            "title",
+            "Title",
+          ]
+        );
+
+
+      if (!itemName) {
+        return [];
+      }
+
+
+      return [
+        {
+          itemName,
+
+          productionType:
+            getString(
+              item,
+              [
+                "productionType",
+                "ProductionType",
+
+                "productionMethod",
+                "ProductionMethod",
+              ]
+            ),
+
+          duration:
+            normalizeTimeSpan(
+              getString(
+                item,
+                [
+                  "duration",
+                  "Duration",
+                ]
+              )
+            ),
+        },
+      ];
+    }
+  );
+}
+
+
+/*
+ * تبدیل گزینه‌های id/name
+ */
+function normalizeSimpleOptions(
+  items: unknown[]
+): {
+  id: number;
+  name: string;
+}[] {
+  return items.flatMap(
+    (item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+
+
+      const id =
+        getNumber(
+          item,
+          [
+            "id",
+            "Id",
+
+            "value",
+            "Value",
+
+            "personnelId",
+            "PersonnelId",
+
+            "activityTypeId",
+            "ActivityTypeId",
+          ]
+        );
+
+
+      const name =
+        getString(
+          item,
+          [
+            "name",
+            "Name",
+
+            "text",
+            "Text",
+
+            "title",
+            "Title",
+
+            "personnelName",
+            "PersonnelName",
+
+            "activityTypeName",
+            "ActivityTypeName",
+          ]
+        );
+
+
+      return (
+        id !== null &&
+        name
+      )
+        ? [
+            {
+              id,
+              name,
+            },
+          ]
+        : [];
+    }
+  );
+}
+
+
+/*
+ * تبدیل کارشناسان
+ */
+function normalizeExperts(
+  items: unknown[]
+): ProfileExpertOption[] {
+  return items.flatMap(
+    (item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+
+
+      const id =
+        getString(
+          item,
+          [
+            "id",
+            "Id",
+
+            "expertId",
+            "ExpertId",
+          ]
+        );
+
+
+      if (!id) {
+        return [];
+      }
+
+
+      return [
+        {
+          id,
+
+          firstName:
+            getString(
+              item,
+              [
+                "firstName",
+                "FirstName",
+              ]
+            ),
+
+          lastName:
+            getString(
+              item,
+              [
+                "lastName",
+                "LastName",
+              ]
+            ),
+        },
+      ];
+    }
+  );
+}
+
+
+/*
+ * محورهای موضوعی
+ */
+function normalizeTopicAxes(
+  value: unknown
+): ProfileTopicAxisOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+
+  return value.flatMap(
+    (
+      item,
+      index
+    ) => {
+      if (
+        typeof item ===
+        "string"
+      ) {
+        return item.trim()
+          ? [
+              {
+                id:
+                  `axis-${index}`,
+
+                title:
+                  item.trim(),
+              },
+            ]
+          : [];
+      }
+
+
+      if (!isRecord(item)) {
+        return [];
+      }
+
+
+      const id =
+        getString(
+          item,
+          [
+            "id",
+            "Id",
+          ]
+        );
+
+
+      const title =
+        getString(
+          item,
+          [
+            "title",
+            "Title",
+
+            "name",
+            "Name",
+          ]
+        );
+
+
+      return (
+        id &&
+        title
+      )
+        ? [
+            {
+              id,
+              title,
+            },
+          ]
+        : [];
+    }
+  );
+}
+
+
+/*
+ * اضافه‌کردن عوامل فعلی به Dropdown
+ * در صورتی که سرویس پرسنل آن‌ها را
+ * برنگردانده باشد.
+ */
+function mergeCrewWithPersonnel(
+  crew:
+    ProfileCrewMemberData[],
+  personnel:
+    PersonnelOption[]
+): PersonnelOption[] {
+  const result = [
+    ...personnel,
+  ];
+
+
+  for (const member of crew) {
+    if (
+      !result.some(
+        (item) =>
+          item.id ===
+          member.personnelId
+      )
+    ) {
+      result.push({
+        id:
+          member.personnelId,
+
+        name:
+          member.personnelName,
+      });
+    }
+  }
+
+
+  return result;
+}
+
+
+function mergeCrewWithActivities(
+  crew:
+    ProfileCrewMemberData[],
+  activities:
+    CrewActivityOption[]
+): CrewActivityOption[] {
+  const result = [
+    ...activities,
+  ];
+
+
+  for (const member of crew) {
+    if (
+      !result.some(
+        (item) =>
+          item.id ===
+          member.activityTypeId
+      )
+    ) {
+      result.push({
+        id:
+          member.activityTypeId,
+
+        name:
+          member.activityTypeName,
+      });
+    }
+  }
+
+
+  return result;
+}
+
+
+function getString(
+  value:
+    UnknownRecord,
+  fields:
+    string[]
+): string {
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (
+      typeof fieldValue ===
+        "string" &&
+      fieldValue.trim()
+    ) {
+      return fieldValue.trim();
+    }
+  }
+
+
+  return "";
+}
+
+
+function getNumber(
+  value:
+    UnknownRecord,
+  fields:
+    string[]
+): number | null {
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    const numericValue =
+      typeof fieldValue ===
+        "number"
+        ? fieldValue
+        : typeof fieldValue ===
+              "string" &&
+            fieldValue.trim()
+          ? Number(
+              normalizeDigits(
+                fieldValue
+              )
+            )
+          : Number.NaN;
+
+
+    if (
+      Number.isFinite(
+        numericValue
+      )
+    ) {
+      return numericValue;
+    }
+  }
+
+
+  return null;
+}
+
+
+function getBoolean(
+  value:
+    UnknownRecord,
+  fields:
+    string[]
 ): boolean {
-  return /^\d{2}:\d{2}:\d{2}$/.test(
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (
+      fieldValue === true ||
+      fieldValue === "true" ||
+      fieldValue === 1 ||
+      fieldValue === "1"
+    ) {
+      return true;
+    }
+
+
+    if (
+      fieldValue === false ||
+      fieldValue === "false" ||
+      fieldValue === 0 ||
+      fieldValue === "0"
+    ) {
+      return false;
+    }
+  }
+
+
+  return false;
+}
+
+
+function normalizeTimeSpan(
+  value: string
+): string {
+  const normalized =
     normalizeDigits(
       value.trim()
-    )
-  );
-}
-
-
-function normalizeTime(
-  value: string
-): string {
-  return normalizeDigits(
-    value.trim()
-  );
-}
-
-
-function normalizeDigits(
-  value: string
-): string {
-  const persianDigits =
-    "۰۱۲۳۴۵۶۷۸۹";
-
-  const arabicDigits =
-    "٠١٢٣٤٥٦٧٨٩";
-
-  return value
-    .replace(
-      /[۰-۹]/g,
-      (digit) =>
-        String(
-          persianDigits.indexOf(
-            digit
-          )
-        )
-    )
-    .replace(
-      /[٠-٩]/g,
-      (digit) =>
-        String(
-          arabicDigits.indexOf(
-            digit
-          )
-        )
     );
+
+
+  if (
+    /^\d{2,}:[0-5]\d:[0-5]\d$/
+      .test(normalized)
+  ) {
+    return normalized;
+  }
+
+
+  if (
+    /^\d{2}:[0-5]\d$/
+      .test(normalized)
+  ) {
+    return (
+      normalized +
+      ":00"
+    );
+  }
+
+
+  return normalized;
 }
 
 
-function formatPersianDate(
+function normalizeClockTime(
   value: string
 ): string {
+  const normalized =
+    normalizeTimeSpan(
+      value
+    );
+
+
+  return normalized ||
+    "00:00:00";
+}
+
+
+function formatJalaliDate(
+  value: string
+): string {
+  if (!value) {
+    return "";
+  }
+
+
   const date =
     new Date(
-      normalizeDigits(value)
+      normalizeDigits(
+        value
+      )
     );
+
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-    return value;
+    return "";
   }
 
+
   return new Intl.DateTimeFormat(
-    "fa-IR",
+    "fa-IR-u-ca-persian",
     {
       year:
         "numeric",
@@ -1023,6 +1885,9 @@ function formatPersianDate(
 
       day:
         "2-digit",
+
+      timeZone:
+        "UTC",
     }
   ).format(date);
 }
@@ -1034,6 +1899,7 @@ function parseJsonResponse(
   if (!value.trim()) {
     return null;
   }
+
 
   try {
     return JSON.parse(
@@ -1052,29 +1918,71 @@ function getErrorMessage(
     return null;
   }
 
-  if (
-    typeof value.message ===
-    "string"
-  ) {
-    return value.message;
+
+  const fields = [
+    "message",
+    "Message",
+
+    "description",
+    "Description",
+
+    "detail",
+    "MessageDetail",
+  ];
+
+
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (
+      typeof fieldValue ===
+        "string" &&
+      fieldValue.trim()
+    ) {
+      return fieldValue;
+    }
   }
 
-  if (
-    typeof value.description ===
-    "string"
-  ) {
-    return value.description;
-  }
 
   return null;
 }
 
 
+function normalizeDigits(
+  value: string
+): string {
+  return value
+    .replace(
+      /[۰-۹]/g,
+      (digit) =>
+        String(
+          "۰۱۲۳۴۵۶۷۸۹"
+            .indexOf(
+              digit
+            )
+        )
+    )
+    .replace(
+      /[٠-٩]/g,
+      (digit) =>
+        String(
+          "٠١٢٣٤٥٦٧٨٩"
+            .indexOf(
+              digit
+            )
+        )
+    );
+}
+
+
 function isRecord(
   value: unknown
-): value is Record<string, unknown> {
+): value is UnknownRecord {
   return (
-    typeof value === "object" &&
+    typeof value ===
+      "object" &&
     value !== null &&
     !Array.isArray(value)
   );

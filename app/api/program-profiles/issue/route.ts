@@ -8,76 +8,20 @@ import {
 
 import {
   API_CONFIG,
-  API_ENDPOINTS,
 } from "@/app/lib/api-config";
 
-
-interface IssueProgramProfileRequest {
-  forecastId: string;
-
-  planId: number;
-
-  networkId: number;
-
-  networkGroupId: number;
-
-  duration: string;
-
-  broadcastDate: string;
-
-  productionMethod: string;
-
-  occasion: string;
-
-  floorId: number;
-
-  floorName: string;
-
-  programDegreeId: number;
-
-  programDegreeName: string;
-
-  programStructureId: number;
-
-  programStructureName: string;
-
-  startTime: string;
-
-  crewMembers:
-    IssueCrewMemberRequest[];
-
-  items:
-    IssueProgramItemRequest[];
-}
-
-
-interface IssueCrewMemberRequest {
-  personnelId: number;
-
-  personnelName: string;
-
-  activityTypeId: number;
-
-  activityTypeName: string;
-
-  isPresent: boolean;
-}
-
-
-interface IssueProgramItemRequest {
-  itemName: string;
-
-  productionType: string;
-
-  duration: string;
-}
+import type {
+  IssueProgramProfileRequest,
+  ProfileCrewMemberData,
+  ProfileItemData,
+} from "@/app/types/program-profile";
 
 
 /*
  * POST /api/program-profiles/issue
  *
- * دریافت اطلاعات فرم از Frontend
- * و ارسال آن به Backend اصلی
+ * صدور شناسنامه از روی
+ * Forecast تأییدشده
  */
 export async function POST(
   request: Request
@@ -95,193 +39,368 @@ export async function POST(
         "access-token"
       )?.value;
 
+
     if (!accessToken) {
-      return jsonError(
-        "نشست کاربری معتبر نیست. دوباره وارد سامانه شوید.",
-        401
+      return NextResponse.json(
+        {
+          message:
+            "نشست کاربری معتبر نیست.",
+        },
+        {
+          status: 401,
+        }
       );
     }
 
 
     /*
-     * دریافت Body به‌صورت unknown
+     * خواندن بدنه درخواست
      */
     const requestData =
       await request.json() as
         unknown;
 
 
-    /*
-     * بررسی ساختار Body
-     */
-    if (
-      !isIssueProgramProfileRequest(
-        requestData
-      )
-    ) {
-      return jsonError(
-        "ساختار اطلاعات شناسنامه معتبر نیست.",
-        400
+    if (!isRecord(requestData)) {
+      return NextResponse.json(
+        {
+          message:
+            "ساختار اطلاعات شناسنامه معتبر نیست.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
 
     /*
-     * پاک‌سازی و تبدیل ارقام فارسی
+     * استخراج و نرمال‌سازی
+     * اطلاعات اصلی
      */
-    const broadcastDate =
-      normalizeDigits(
-        requestData.broadcastDate
-          .trim()
+    const forecastId =
+      getString(
+        requestData,
+        "forecastId"
+      );
+
+    const planId =
+      getPositiveInteger(
+        requestData,
+        "planId"
+      );
+
+    const networkId =
+      getPositiveInteger(
+        requestData,
+        "networkId"
+      );
+
+    const networkGroupId =
+      getPositiveInteger(
+        requestData,
+        "networkGroupId"
       );
 
     const duration =
       normalizeDigits(
-        requestData.duration
-          .trim()
+        getString(
+          requestData,
+          "duration"
+        )
+      );
+
+    const broadcastDate =
+      normalizeDigits(
+        getString(
+          requestData,
+          "broadcastDate"
+        )
+      );
+
+    const productionMethod =
+      getString(
+        requestData,
+        "productionMethod"
+      );
+
+    const occasion =
+      getString(
+        requestData,
+        "occasion"
+      );
+
+    const floorId =
+      getPositiveInteger(
+        requestData,
+        "floorId"
+      );
+
+    const floorName =
+      getString(
+        requestData,
+        "floorName"
+      );
+
+    const programDegreeId =
+      getPositiveInteger(
+        requestData,
+        "programDegreeId"
+      );
+
+    const programDegreeName =
+      getString(
+        requestData,
+        "programDegreeName"
+      );
+
+    const programStructureId =
+      getPositiveInteger(
+        requestData,
+        "programStructureId"
+      );
+
+    const programStructureName =
+      getString(
+        requestData,
+        "programStructureName"
       );
 
     const startTime =
       normalizeDigits(
-        requestData.startTime
-          .trim()
+        getString(
+          requestData,
+          "startTime"
+        )
       );
 
 
     /*
-     * اعتبارسنجی مقادیر اصلی
+     * اعتبارسنجی اطلاعات اصلی
      */
-    const validationMessage =
-      validateIssueRequest({
-        ...requestData,
+    if (!forecastId) {
+      return badRequest(
+        "شناسه پیش‌بینی الزامی است."
+      );
+    }
 
-        broadcastDate,
 
-        duration,
+    if (planId === null) {
+      return badRequest(
+        "شناسه برنامه معتبر نیست."
+      );
+    }
 
-        startTime,
-      });
 
-    if (validationMessage) {
-      return jsonError(
-        validationMessage,
-        400
+    if (networkId === null) {
+      return badRequest(
+        "شناسه شبکه معتبر نیست."
+      );
+    }
+
+
+    if (
+      networkGroupId ===
+      null
+    ) {
+      return badRequest(
+        "شناسه گروه برنامه‌ساز معتبر نیست."
+      );
+    }
+
+
+    if (!isTimeSpan(duration)) {
+      return badRequest(
+        "مدت برنامه باید با فرمت hh:mm:ss وارد شود."
+      );
+    }
+
+
+    if (
+      !broadcastDate ||
+      Number.isNaN(
+        Date.parse(
+          broadcastDate
+        )
+      )
+    ) {
+      return badRequest(
+        "تاریخ پخش معتبر نیست."
+      );
+    }
+
+
+    if (!productionMethod) {
+      return badRequest(
+        "نحوه تولید الزامی است."
+      );
+    }
+
+
+    if (!occasion) {
+      return badRequest(
+        "مناسبت الزامی است."
+      );
+    }
+
+
+    if (floorId === null) {
+      return badRequest(
+        "شناسه طبقه برنامه معتبر نیست."
+      );
+    }
+
+
+    if (!floorName) {
+      return badRequest(
+        "نام طبقه برنامه الزامی است."
+      );
+    }
+
+
+    if (
+      programDegreeId ===
+      null
+    ) {
+      return badRequest(
+        "شناسه درجه برنامه معتبر نیست."
+      );
+    }
+
+
+    if (!programDegreeName) {
+      return badRequest(
+        "نام درجه برنامه الزامی است."
+      );
+    }
+
+
+    if (
+      programStructureId ===
+      null
+    ) {
+      return badRequest(
+        "شناسه ساختار برنامه معتبر نیست."
+      );
+    }
+
+
+    if (
+      !programStructureName
+    ) {
+      return badRequest(
+        "نام ساختار برنامه الزامی است."
+      );
+    }
+
+
+    if (!isClockTime(startTime)) {
+      return badRequest(
+        "ساعت شروع باید با فرمت hh:mm:ss وارد شود."
       );
     }
 
 
     /*
-     * ساخت بدنه دقیق Backend
+     * تبدیل عوامل برنامه
+     */
+    const crewResult =
+      normalizeCrewMembers(
+        requestData.crewMembers
+      );
+
+
+    if (!crewResult.ok) {
+      return badRequest(
+        crewResult.message
+      );
+    }
+
+
+    /*
+     * تبدیل آیتم‌های برنامه
+     */
+    const itemsResult =
+      normalizeProgramItems(
+        requestData.items
+      );
+
+
+    if (!itemsResult.ok) {
+      return badRequest(
+        itemsResult.message
+      );
+    }
+
+
+    /*
+     * Payload دقیق مطابق مستند
+     *
+     * mainTopic و hasExpert
+     * عمداً ارسال نمی‌شوند؛
+     * Backend آن‌ها را از Forecast
+     * دریافت می‌کند.
      */
     const backendBody:
       IssueProgramProfileRequest = {
-      forecastId:
-        requestData.forecastId
-          .trim(),
+      forecastId,
 
-      planId:
-        requestData.planId,
+      planId,
 
-      networkId:
-        requestData.networkId,
+      networkId,
 
-      networkGroupId:
-        requestData.networkGroupId,
+      networkGroupId,
 
       duration,
 
       broadcastDate,
 
-      productionMethod:
-        requestData.productionMethod
-          .trim(),
+      productionMethod,
 
-      occasion:
-        requestData.occasion
-          .trim(),
+      occasion,
 
-      floorId:
-        requestData.floorId,
+      floorId,
 
-      floorName:
-        requestData.floorName
-          .trim(),
+      floorName,
 
-      programDegreeId:
-        requestData.programDegreeId,
+      programDegreeId,
 
-      programDegreeName:
-        requestData.programDegreeName
-          .trim(),
+      programDegreeName,
 
-      programStructureId:
-        requestData.programStructureId,
+      programStructureId,
 
-      programStructureName:
-        requestData.programStructureName
-          .trim(),
+      programStructureName,
 
       startTime,
 
       crewMembers:
-        requestData.crewMembers.map(
-          (crewMember) => ({
-            personnelId:
-              crewMember.personnelId,
-
-            personnelName:
-              crewMember.personnelName
-                .trim(),
-
-            activityTypeId:
-              crewMember.activityTypeId,
-
-            activityTypeName:
-              crewMember.activityTypeName
-                .trim(),
-
-            isPresent:
-              crewMember.isPresent,
-          })
-        ),
+        crewResult.items,
 
       items:
-        requestData.items.map(
-          (item) => ({
-            itemName:
-              item.itemName
-                .trim(),
-
-            productionType:
-              item.productionType
-                .trim(),
-
-            duration:
-              normalizeDigits(
-                item.duration.trim()
-              ),
-          })
-        ),
+        itemsResult.items,
     };
 
 
     const backendUrl =
-      `${API_CONFIG.baseUrl}` +
-      `${API_ENDPOINTS.programProfiles.issue}`;
+      `${removeTrailingSlash(
+        API_CONFIG.baseUrl
+      )}` +
+      "/program-profiles/issue";
 
 
-    /*
-     * برای عیب‌یابی در ترمینال Next.js
-     */
-    console.log(
-      "Issue program profile request:",
-      {
-        backendUrl,
+    if (
+      process.env.NODE_ENV ===
+      "development"
+    ) {
+      console.log(
+        "ISSUE PROFILE REQUEST:",
+        {
+          backendUrl,
 
-        requestBody:
           backendBody,
-      }
-    );
+        }
+      );
+    }
 
 
     /*
@@ -316,12 +435,9 @@ export async function POST(
       );
 
 
-    /*
-     * پاسخ ابتدا Text خوانده می‌شود
-     * تا پاسخ خالی موجب خطای JSON نشود.
-     */
     const responseText =
       await backendResponse.text();
+
 
     const responseData =
       parseJsonResponse(
@@ -329,43 +445,46 @@ export async function POST(
       );
 
 
-    /*
-     * خطای Backend
-     */
-    if (!backendResponse.ok) {
-      console.error(
-        "Issue program profile backend error:",
+    if (
+      process.env.NODE_ENV ===
+      "development"
+    ) {
+      console.log(
+        "ISSUE PROFILE RESPONSE:",
         {
-          url:
-            backendUrl,
-
           status:
             backendResponse.status,
 
-          statusText:
-            backendResponse.statusText,
-
-          requestBody:
-            backendBody,
-
-          responseText,
+          response:
+            responseData ??
+            responseText,
         }
       );
+    }
 
+
+    /*
+     * پاسخ ناموفق Backend
+     */
+    if (!backendResponse.ok) {
       return NextResponse.json(
         {
           message:
-            getApiErrorMessage(
+            getErrorMessage(
               responseData
             ) ??
             (
-              responseText.trim()
-                ? responseText
-                : `صدور شناسنامه انجام نشد. کد پاسخ Backend: ${backendResponse.status}`
+              "صدور شناسنامه انجام نشد. " +
+              "کد پاسخ Backend: " +
+              backendResponse.status
             ),
 
-          status:
-            backendResponse.status,
+          details:
+            responseData ??
+            responseText.slice(
+              0,
+              500
+            ),
         },
         {
           status:
@@ -376,43 +495,58 @@ export async function POST(
 
 
     /*
-     * طبق مستند پاسخ موفق 201
-     * شامل ProfileResponse است.
+     * طبق مستند، Backend باید
+     * ProfileResponse برگرداند.
+     *
+     * برای ثبت کارشناسان به id
+     * شناسنامه نیاز داریم.
      */
-    if (
-      responseData !== null &&
-      !isRecord(
+    const issuedProfile =
+      extractIssuedProfile(
         responseData
-      )
-    ) {
-      console.error(
-        "Invalid issue profile response:",
-        {
-          status:
-            backendResponse.status,
-
-          responseText,
-        }
       );
 
-      return jsonError(
-        "ساختار پاسخ صدور شناسنامه معتبر نیست.",
-        502
+
+    if (!issuedProfile) {
+      console.error(
+        "Issued profile id not found:",
+        responseData ??
+        responseText
+      );
+
+
+      return NextResponse.json(
+        {
+          message:
+            "شناسنامه صادر شد؛ اما شناسه شناسنامه در پاسخ Backend پیدا نشد.",
+
+          details:
+            responseData ??
+            responseText,
+        },
+        {
+          status: 502,
+        }
       );
     }
 
 
+    /*
+     * پاسخ یکپارچه Route داخلی
+     */
     return NextResponse.json(
       {
         message:
           "شناسنامه با موفقیت صادر شد.",
 
         profile:
-          responseData,
+          issuedProfile,
+
+        issueSucceeded:
+          true,
       },
       {
-        status:
-          201,
+        status: 201,
       }
     );
   } catch (error) {
@@ -421,373 +555,630 @@ export async function POST(
       error
     );
 
+
     if (
-      error instanceof SyntaxError
+      error instanceof
+      SyntaxError
     ) {
-      return jsonError(
-        "اطلاعات ارسال‌شده JSON معتبر نیست.",
-        400
+      return NextResponse.json(
+        {
+          message:
+            "بدنه درخواست JSON معتبر نیست.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    return jsonError(
-      "ارتباط با وب‌سرویس صدور شناسنامه برقرار نشد.",
-      500
+
+    return NextResponse.json(
+      {
+        message:
+          "ارتباط با وب‌سرویس صدور شناسنامه برقرار نشد.",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }
 
 
 /*
- * بررسی ساختار درخواست
+ * تبدیل و اعتبارسنجی عوامل
  */
-function isIssueProgramProfileRequest(
+function normalizeCrewMembers(
   value: unknown
-): value is IssueProgramProfileRequest {
-  if (!isRecord(value)) {
-    return false;
+):
+  | {
+      ok: true;
+      items:
+        ProfileCrewMemberData[];
+    }
+  | {
+      ok: false;
+      message: string;
+    } {
+  /*
+   * طبق مستند آرایه الزامی است؛
+   * ولی می‌تواند خالی باشد.
+   */
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+
+      message:
+        "ساختار عوامل برنامه معتبر نیست.",
+    };
   }
 
-  return (
-    typeof value.forecastId ===
-      "string" &&
 
-    typeof value.planId ===
-      "number" &&
+  const items:
+    ProfileCrewMemberData[] = [];
 
-    typeof value.networkId ===
-      "number" &&
 
-    typeof value.networkGroupId ===
-      "number" &&
+  for (
+    let index = 0;
+    index < value.length;
+    index += 1
+  ) {
+    const item =
+      value[index];
 
-    typeof value.duration ===
-      "string" &&
 
-    typeof value.broadcastDate ===
-      "string" &&
+    if (!isRecord(item)) {
+      return {
+        ok: false,
 
-    typeof value.productionMethod ===
-      "string" &&
+        message:
+          `اطلاعات عامل ردیف ${
+            index + 1
+          } معتبر نیست.`,
+      };
+    }
 
-    typeof value.occasion ===
-      "string" &&
 
-    typeof value.floorId ===
-      "number" &&
+    const personnelId =
+      getPositiveInteger(
+        item,
+        "personnelId"
+      );
 
-    typeof value.floorName ===
-      "string" &&
+    const personnelName =
+      getString(
+        item,
+        "personnelName"
+      );
 
-    typeof value.programDegreeId ===
-      "number" &&
+    const activityTypeId =
+      getPositiveInteger(
+        item,
+        "activityTypeId"
+      );
 
-    typeof value.programDegreeName ===
-      "string" &&
+    const activityTypeName =
+      getString(
+        item,
+        "activityTypeName"
+      );
 
-    typeof value.programStructureId ===
-      "number" &&
+    const isPresent =
+      getBoolean(
+        item,
+        "isPresent"
+      );
 
-    typeof value.programStructureName ===
-      "string" &&
 
-    typeof value.startTime ===
-      "string" &&
+    if (personnelId === null) {
+      return {
+        ok: false,
 
-    Array.isArray(
-      value.crewMembers
-    ) &&
+        message:
+          `شناسه پرسنل ردیف ${
+            index + 1
+          } معتبر نیست.`,
+      };
+    }
 
-    value.crewMembers.every(
-      isCrewMemberRequest
-    ) &&
 
-    Array.isArray(
-      value.items
-    ) &&
+    if (!personnelName) {
+      return {
+        ok: false,
 
-    value.items.every(
-      isProgramItemRequest
-    )
-  );
+        message:
+          `نام پرسنل ردیف ${
+            index + 1
+          } الزامی است.`,
+      };
+    }
+
+
+    if (
+      activityTypeId === null
+    ) {
+      return {
+        ok: false,
+
+        message:
+          `نوع فعالیت ردیف ${
+            index + 1
+          } معتبر نیست.`,
+      };
+    }
+
+
+    if (!activityTypeName) {
+      return {
+        ok: false,
+
+        message:
+          `عنوان فعالیت ردیف ${
+            index + 1
+          } الزامی است.`,
+      };
+    }
+
+
+    if (isPresent === null) {
+      return {
+        ok: false,
+
+        message:
+          `وضعیت حضور عامل ردیف ${
+            index + 1
+          } معتبر نیست.`,
+      };
+    }
+
+
+    items.push({
+      personnelId,
+
+      personnelName,
+
+      activityTypeId,
+
+      activityTypeName,
+
+      isPresent,
+    });
+  }
+
+
+  return {
+    ok: true,
+    items,
+  };
 }
 
 
 /*
- * بررسی هر عامل برنامه
+ * تبدیل و اعتبارسنجی آیتم‌ها
  */
-function isCrewMemberRequest(
+function normalizeProgramItems(
   value: unknown
-): value is IssueCrewMemberRequest {
-  if (!isRecord(value)) {
-    return false;
+):
+  | {
+      ok: true;
+      items:
+        ProfileItemData[];
+    }
+  | {
+      ok: false;
+      message: string;
+    } {
+  /*
+   * طبق مستند آرایه الزامی است؛
+   * ولی می‌تواند خالی باشد.
+   */
+  if (!Array.isArray(value)) {
+    return {
+      ok: false,
+
+      message:
+        "ساختار آیتم‌های برنامه معتبر نیست.",
+    };
   }
 
-  return (
-    typeof value.personnelId ===
-      "number" &&
 
-    typeof value.personnelName ===
-      "string" &&
+  const items:
+    ProfileItemData[] = [];
 
-    typeof value.activityTypeId ===
-      "number" &&
 
-    typeof value.activityTypeName ===
-      "string" &&
+  for (
+    let index = 0;
+    index < value.length;
+    index += 1
+  ) {
+    const item =
+      value[index];
 
-    typeof value.isPresent ===
-      "boolean"
-  );
+
+    if (!isRecord(item)) {
+      return {
+        ok: false,
+
+        message:
+          `اطلاعات آیتم ردیف ${
+            index + 1
+          } معتبر نیست.`,
+      };
+    }
+
+
+    const itemName =
+      getString(
+        item,
+        "itemName"
+      );
+
+    const productionType =
+      getString(
+        item,
+        "productionType"
+      );
+
+    const duration =
+      normalizeDigits(
+        getString(
+          item,
+          "duration"
+        )
+      );
+
+
+    if (!itemName) {
+      return {
+        ok: false,
+
+        message:
+          `عنوان آیتم ردیف ${
+            index + 1
+          } الزامی است.`,
+      };
+    }
+
+
+    if (!productionType) {
+      return {
+        ok: false,
+
+        message:
+          `نوع تولید آیتم ردیف ${
+            index + 1
+          } الزامی است.`,
+      };
+    }
+
+
+    if (!isTimeSpan(duration)) {
+      return {
+        ok: false,
+
+        message:
+          `مدت آیتم ردیف ${
+            index + 1
+          } باید با فرمت hh:mm:ss باشد.`,
+      };
+    }
+
+
+    items.push({
+      itemName,
+
+      productionType,
+
+      duration,
+    });
+  }
+
+
+  return {
+    ok: true,
+    items,
+  };
 }
 
 
 /*
- * بررسی هر آیتم برنامه
+ * استخراج Profile از حالت‌های مختلف:
+ *
+ * ProfileResponse
+ *
+ * { profile: ProfileResponse }
+ *
+ * { data: ProfileResponse }
+ *
+ * { data: { profile: ProfileResponse } }
  */
-function isProgramItemRequest(
+function extractIssuedProfile(
   value: unknown
-): value is IssueProgramItemRequest {
+): Record<
+  string,
+  unknown
+> | null {
   if (!isRecord(value)) {
-    return false;
+    return null;
   }
 
-  return (
-    typeof value.itemName ===
-      "string" &&
 
-    typeof value.productionType ===
-      "string" &&
+  const candidates:
+    unknown[] = [
+    value,
 
-    typeof value.duration ===
-      "string"
-  );
-}
+    value.profile,
+
+    value.data,
+
+    value.result,
+  ];
 
 
-/*
- * اعتبارسنجی محتوای درخواست
- */
-function validateIssueRequest(
-  value: IssueProgramProfileRequest
-): string | null {
-  if (
-    !isGuid(
-      value.forecastId
-    )
-  ) {
-    return "شناسه پیش‌بینی معتبر نیست.";
-  }
+  if (isRecord(value.data)) {
+    candidates.push(
+      value.data.profile,
 
-  if (
-    !isPositiveInteger(
-      value.planId
-    )
-  ) {
-    return "شناسه برنامه معتبر نیست.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.networkId
-    )
-  ) {
-    return "شناسه شبکه معتبر نیست.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.networkGroupId
-    )
-  ) {
-    return "شناسه گروه برنامه‌ساز معتبر نیست.";
-  }
-
-  if (
-    !isDuration(
-      value.duration
-    )
-  ) {
-    return "مدت برنامه باید با فرمت hh:mm:ss وارد شود.";
-  }
-
-  if (
-    !value.broadcastDate ||
-    Number.isNaN(
-      Date.parse(
-        value.broadcastDate
-      )
-    )
-  ) {
-    return "تاریخ پخش معتبر نیست.";
-  }
-
-  if (
-    !value.productionMethod
-      .trim()
-  ) {
-    return "نحوه تولید الزامی است.";
-  }
-
-  if (
-    !value.occasion.trim()
-  ) {
-    return "مناسبت الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.floorId
-    )
-  ) {
-    return "شناسه طبقه برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.floorName.trim()
-  ) {
-    return "نام طبقه برنامه الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.programDegreeId
-    )
-  ) {
-    return "شناسه درجه برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.programDegreeName
-      .trim()
-  ) {
-    return "نام درجه برنامه الزامی است.";
-  }
-
-  if (
-    !isPositiveInteger(
-      value.programStructureId
-    )
-  ) {
-    return "شناسه ساختار برنامه معتبر نیست.";
-  }
-
-  if (
-    !value.programStructureName
-      .trim()
-  ) {
-    return "نام ساختار برنامه الزامی است.";
-  }
-
-  if (
-    !isStartTime(
-      value.startTime
-    )
-  ) {
-    return "ساعت شروع باید با فرمت hh:mm:ss وارد شود.";
+      value.data.result
+    );
   }
 
 
   for (
-    const crewMember of
-    value.crewMembers
+    const candidate of
+    candidates
   ) {
     if (
-      !isPositiveInteger(
-        crewMember.personnelId
-      ) ||
-      !crewMember.personnelName
-        .trim() ||
-      !isPositiveInteger(
-        crewMember.activityTypeId
-      ) ||
-      !crewMember.activityTypeName
-        .trim()
+      isRecord(candidate) &&
+      typeof candidate.id ===
+        "string" &&
+      candidate.id.trim()
     ) {
-      return "اطلاعات عوامل برنامه کامل یا معتبر نیست.";
+      return candidate;
     }
   }
 
-
-  for (
-    const item of
-    value.items
-  ) {
-    if (
-      !item.itemName.trim() ||
-      !item.productionType
-        .trim() ||
-      !isDuration(
-        item.duration
-      )
-    ) {
-      return "اطلاعات آیتم‌های برنامه کامل یا معتبر نیست.";
-    }
-  }
 
   return null;
 }
 
 
 /*
- * Guid استاندارد
+ * پاسخ 400 داخلی
  */
-function isGuid(
-  value: string
-): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value.trim()
+function badRequest(
+  message: string
+) {
+  return NextResponse.json(
+    {
+      message,
+    },
+    {
+      status: 400,
+    }
   );
 }
 
 
 /*
- * اعداد مثبت
+ * بررسی فرمت TimeSpan
+ *
+ * نمونه:
+ * 01:00:00
+ * 100:00:00
  */
-function isPositiveInteger(
-  value: number
+function isTimeSpan(
+  value: string
 ): boolean {
   return (
-    Number.isInteger(value) &&
-    value > 0
+    /^\d{2,}:[0-5]\d:[0-5]\d$/
+      .test(value)
   );
 }
 
 
 /*
- * مدت زمان با فرمت TimeSpan
+ * بررسی ساعت شبانه‌روز
  *
- * ساعت مدت برنامه می‌تواند
- * بیشتر از 23 باشد.
+ * نمونه:
+ * 20:30:00
  */
-function isDuration(
+function isClockTime(
   value: string
 ): boolean {
-  return /^\d{2,3}:[0-5]\d:[0-5]\d$/.test(
-    normalizeDigits(
-      value.trim()
-    )
+  return (
+    /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/
+      .test(value)
   );
 }
 
 
 /*
- * ساعت شروع بین 00 تا 23
+ * دریافت String
  */
-function isStartTime(
+function getString(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyName: string
+): string {
+  const propertyValue =
+    value[propertyName];
+
+
+  return typeof propertyValue ===
+    "string"
+    ? propertyValue.trim()
+    : "";
+}
+
+
+/*
+ * دریافت عدد صحیح مثبت
+ */
+function getPositiveInteger(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyName: string
+): number | null {
+  const propertyValue =
+    value[propertyName];
+
+
+  const numericValue =
+    typeof propertyValue ===
+      "number"
+      ? propertyValue
+      : typeof propertyValue ===
+            "string" &&
+          propertyValue.trim()
+        ? Number(
+            normalizeDigits(
+              propertyValue
+            )
+          )
+        : Number.NaN;
+
+
+  return (
+    Number.isInteger(
+      numericValue
+    ) &&
+    numericValue > 0
+  )
+    ? numericValue
+    : null;
+}
+
+
+/*
+ * دریافت مقدار Boolean
+ */
+function getBoolean(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyName: string
+): boolean | null {
+  const propertyValue =
+    value[propertyName];
+
+
+  if (
+    propertyValue === true ||
+    propertyValue === "true" ||
+    propertyValue === 1 ||
+    propertyValue === "1"
+  ) {
+    return true;
+  }
+
+
+  if (
+    propertyValue === false ||
+    propertyValue === "false" ||
+    propertyValue === 0 ||
+    propertyValue === "0"
+  ) {
+    return false;
+  }
+
+
+  return null;
+}
+
+
+/*
+ * استخراج پیام خطا
+ */
+function getErrorMessage(
+  value: unknown
+): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+
+  const fields = [
+    "message",
+    "description",
+    "detail",
+    "title",
+  ];
+
+
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+
+    if (
+      typeof fieldValue ===
+        "string" &&
+      fieldValue.trim()
+    ) {
+      return fieldValue;
+    }
+  }
+
+
+  /*
+   * پشتیبانی از:
+   * details: {
+   *   detail: "..."
+   * }
+   */
+  if (isRecord(value.details)) {
+    return getErrorMessage(
+      value.details
+    );
+  }
+
+
+  return null;
+}
+
+
+/*
+ * تبدیل Text به JSON
+ */
+function parseJsonResponse(
+  responseText: string
+): unknown | null {
+  if (!responseText.trim()) {
+    return null;
+  }
+
+
+  try {
+    return JSON.parse(
+      responseText
+    ) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+
+/*
+ * حذف Slash انتهای URL
+ */
+function removeTrailingSlash(
   value: string
-): boolean {
-  return /^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(
-    normalizeDigits(
-      value.trim()
-    )
+): string {
+  return value.replace(
+    /\/+$/,
+    ""
   );
 }
 
 
 /*
- * تبدیل ارقام فارسی و عربی
- * به ارقام انگلیسی
+ * تبدیل اعداد فارسی و عربی
  */
 function normalizeDigits(
   value: string
@@ -797,6 +1188,7 @@ function normalizeDigits(
 
   const arabicDigits =
     "٠١٢٣٤٥٦٧٨٩";
+
 
   return value
     .replace(
@@ -821,123 +1213,7 @@ function normalizeDigits(
 
 
 /*
- * تبدیل امن Text به JSON
- */
-function parseJsonResponse(
-  responseText: string
-): unknown | null {
-  if (!responseText.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(
-      responseText
-    ) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-
-/*
- * استخراج پیام خطای Backend
- */
-function getApiErrorMessage(
-  value: unknown
-): string | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  if (
-    typeof value.message ===
-    "string"
-  ) {
-    return value.message;
-  }
-
-  if (
-    typeof value.description ===
-    "string"
-  ) {
-    return value.description;
-  }
-
-  if (
-    typeof value.errors ===
-    "string"
-  ) {
-    return value.errors;
-  }
-
-  const validationMessages =
-    getValidationMessages(
-      value.errors
-    );
-
-  if (
-    validationMessages.length > 0
-  ) {
-    return validationMessages.join(
-      "، "
-    );
-  }
-
-  if (
-    typeof value.title ===
-    "string"
-  ) {
-    return value.title;
-  }
-
-  return null;
-}
-
-
-/*
- * استخراج خطاهای Validation
- */
-function getValidationMessages(
-  value: unknown
-): string[] {
-  if (!isRecord(value)) {
-    return [];
-  }
-
-  return Object.values(
-    value
-  ).flatMap((errorValue) => {
-    if (
-      typeof errorValue ===
-      "string"
-    ) {
-      return [
-        errorValue,
-      ];
-    }
-
-    if (
-      Array.isArray(
-        errorValue
-      )
-    ) {
-      return errorValue.filter(
-        (
-          message
-        ): message is string =>
-          typeof message ===
-          "string"
-      );
-    }
-
-    return [];
-  });
-}
-
-
-/*
- * تشخیص Object
+ * بررسی Object
  */
 function isRecord(
   value: unknown
@@ -946,26 +1222,9 @@ function isRecord(
   unknown
 > {
   return (
-    typeof value === "object" &&
+    typeof value ===
+      "object" &&
     value !== null &&
     !Array.isArray(value)
-  );
-}
-
-
-/*
- * پاسخ خطای استاندارد
- */
-function jsonError(
-  message: string,
-  status: number
-) {
-  return NextResponse.json(
-    {
-      message,
-    },
-    {
-      status,
-    }
   );
 }

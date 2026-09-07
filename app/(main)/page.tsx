@@ -57,14 +57,14 @@ const boxes: HomeBoxData[] = [
   {
     title: 'پیش بینی موضوع',
     description: '',
-    href: '/v',
+    href: '../wizard',
     icon: <TrendingUpDown />,
     color: 'blue',
   },
   {
     title: 'موضوع تایید شده',
     description: '',
-    href: '/x',
+    href: '../approved-forecasts',
     icon: <CalendarCheck />,
     color: 'blue',
   },

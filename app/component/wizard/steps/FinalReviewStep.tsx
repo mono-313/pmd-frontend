@@ -39,6 +39,7 @@ interface FinalReviewStepProps {
 
   onBack: () => void;
 
+
   /*جهت انتقال با کلیک روی هر مرحله برای ویرایش
    */
   onEditStep: (
@@ -90,12 +91,6 @@ export default function FinalReviewStep({
    */
   function handleOpenConfirmation() {
     setSubmitError("");
-
-    /*
-     * در مرحله اول نام برنامه موقتاً
-     * اختیاری شده بود، اما طبق Backend
-     * برای ثبت نهایی الزامی است.
-     */
 
 
     const planId =
@@ -175,10 +170,7 @@ async function handleFinalSubmit() {
       );
     }
 
-    /*
-     * شبکه باید از خود برنامه انتخاب‌شده
-     * گرفته شود، نه اولین شبکه کاربر.
-     */
+
     const networkId =
       selectedProgram.networkId;
 
@@ -278,30 +270,16 @@ async function handleFinalSubmit() {
     const requestBody:
       FinalSubmitRequest = {
       planId,
-
       networkId,
-
       networkGroupId,
-
-      /*
-       * تاریخ کاملاً استاندارد و با
-       * ارقام انگلیسی ارسال می‌شود.
-       */
       broadcastDate:
         parsedBroadcastDate
           .toISOString(),
-
       mainTopic,
-
       hasExpert,
-
       topicAxes,
-
       expertIds,
-
-      /*
-       * فعلاً فقط Draft ساخته می‌شود.
-       */
+      // فعلاً فقط Draft
       submitAfterCreate: false,
     };
 
@@ -310,9 +288,7 @@ async function handleFinalSubmit() {
       requestBody
     );
 
-    /*
-     * فقط یک درخواست ثبت وجود دارد.
-     */
+    //response
     const response =
       await fetch(
         "/api/forecasts",
@@ -342,7 +318,6 @@ async function handleFinalSubmit() {
       {
         status:
           response.status,
-
         body:
           responseText,
       }
@@ -394,8 +369,8 @@ async function handleFinalSubmit() {
     setShowConfirmModal(false);
 
     setSuccessMessage(
-      responseData.message ||
-        "پیش‌بینی با موفقیت ثبت شد."
+      responseData.message &&
+        "ثبت با موفقیت انجام شد؛ جهت ادامه فرایند به لیست پیش‌بینی‌ها مراجعه نمایید. "
     );
 
     setTrackingId(
@@ -478,8 +453,8 @@ async function handleFinalSubmit() {
               <p className="font-semibold">
                 {successMessage}
               </p>
-
-              {trackingId && (
+              
+              {/* {trackingId && (
                 <p className="mt-1 text-sm">
                   شناسه پیگیری:
 
@@ -493,7 +468,9 @@ async function handleFinalSubmit() {
                     {trackingId}
                   </span>
                 </p>
-              )}
+              )} */}
+
+              
             </div>
           </div>
         )}
@@ -879,7 +856,7 @@ async function handleFinalSubmit() {
             >
               آیا از ثبت و ارسال اطلاعات برنامه اطمینان دارید؟
             </p>
-
+{/* 
             <p
               className="
                 mt-2
@@ -889,7 +866,7 @@ async function handleFinalSubmit() {
               "
             >
               اطلاعات پس از ثبت برای بررسی ارسال خواهد شد.
-            </p>
+            </p> */}
 
             <div
               className="
@@ -1154,8 +1131,6 @@ function isFinalSubmitResponse(
   if (!isRecord(value)) {
     return false;
   }
-
-
   if (
     typeof value.message !==
       "string" ||
@@ -1169,7 +1144,6 @@ function isFinalSubmitResponse(
   ) {
     return false;
   }
-
 
   return typeof value.forecast.id ===
     "string";
