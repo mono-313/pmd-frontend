@@ -286,6 +286,10 @@ export default function ProgramProfilesPage() {
     <main
       className="
         min-h-screen
+        min-w-0
+        w-full
+        max-w-full
+        overflow-x-hidden
         bg-gray-50
         px-4 py-8
       "
@@ -294,6 +298,9 @@ export default function ProgramProfilesPage() {
       <section
         className="
           mx-auto
+          min-w-0
+          w-full
+          max-w-full
           max-w-7xl
         "
       >
@@ -519,6 +526,9 @@ export default function ProgramProfilesPage() {
 
         <section
           className="
+            min-w-0
+            w-full
+            max-w-full
             overflow-hidden
             rounded-2xl
             border
@@ -559,11 +569,20 @@ export default function ProgramProfilesPage() {
               شناسنامه‌ای پیدا نشد.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div
+              className="
+                block
+                min-w-0
+                w-full
+                max-w-full
+                overflow-x-auto
+                overscroll-x-contain
+              "
+            >
               <table
                 className="
                   w-full
-                  min-w-[1250px]
+                  min-w-[1000px]
                   border-collapse
                 "
               >

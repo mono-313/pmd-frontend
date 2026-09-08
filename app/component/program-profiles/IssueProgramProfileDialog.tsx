@@ -13,7 +13,6 @@ import {
 import ProfileWizardStepper from
 "@/app/component/program-profiles/ProfileWizardStepper"
 
-
 import ProfileSpecificationsStep from
   "@/app/component/program-profiles/steps/ProfileSpecificationsStep";
 
@@ -221,46 +220,40 @@ export default function IssueProfileDialog({
    * دریافت اطلاعات Wizard
    */
   useEffect(() => {
-    if (
-      !isOpen ||
-      !forecastId
-    ) {
-      return;
-    }
+  if (
+    !isOpen ||
+    !forecastId
+  ) {
+    return;
+  }
 
+  /*
+   * بعد از بررسی null بودن، یک نسخه قطعی
+   * و از نوع string نگه می‌داریم.
+   */
+  const selectedForecastId:
+    string = forecastId;
 
-    let cancelled =
-      false;
+  let cancelled =
+    false;
 
+  async function loadWizardData() {
+    try {
+      setIsLoading(true);
+      setLoadingError("");
+      setExpertsError("");
+      setCurrentStep(1);
+      setWizardData(
+        emptyWizardData
+      );
 
-    async function loadWizardData() {
-      try {
-        setIsLoading(true);
-
-        setLoadingError("");
-
-        setExpertsError("");
-
-        setCurrentStep(1);
-
-        setWizardData(
-          emptyWizardData
+      const forecastResponse =
+        await fetchJson(
+          `/api/forecasts/${encodeURIComponent(
+            selectedForecastId
+          )}`
         );
 
-
-        /*
-         * مرحله اول دریافت:
-         *
-         * Forecast برای planId،
-         * networkId، موضوع، قسمت،
-         * کارشناسان و محورهای موضوعی
-         */
-        const forecastResponse =
-          await fetchJson(
-            `/api/forecasts/${encodeURIComponent(
-              forecastId
-            )}`
-          );
 
 
         const forecast =
@@ -343,14 +336,15 @@ export default function IssueProfileDialog({
 
 
         /*
-         * دریافت هم‌زمان اطلاعات مستقل
+         * ابتدا اطلاعاتی را می‌گیریم که برای دریافتشان
+         * به jobId نیاز نداریم.
          */
         const [
           planDetailResponse,
           crewResponse,
           itemsResponse,
-          activitiesResponse,
           expertsResponse,
+          programsResponse,
         ] =
           await Promise.all([
             fetchJson(
@@ -366,66 +360,273 @@ export default function IssueProfileDialog({
             ),
 
             fetchJson(
-              "/api/base-info/activity-types"
-            ),
-
-            fetchJson(
               "/api/experts?pageNumber=1&pageSize=200&isActive=true"
+            ),
+             fetchJson(
+              "/api/programs" +
+              `?networkId=${encodeURIComponent(
+                String(networkId)
+              )}` +
+              `&networkGroupId=${encodeURIComponent(
+                String(networkGroupId)
+              )}`
             ),
           ]);
 
 
         /*
-         * پرسنل بعد از مشخص‌شدن
-         * networkId دریافت می‌شود.
+         * پاسخ estimateDetail ابتدا باز می‌شود تا jobId
+         * تمام عوامل از آن استخراج شود.
          */
-        let personnelResponse:
-          unknown = null;
+        const rawCrewItems =
+          extractArray(
+            crewResponse,
+            [
+              "items",
+              "Items",
+              "crewMembers",
+              "CrewMembers",
+              "data",
+              "Data",
+              "result",
+              "Result",
+            ]
+          );
 
 
-        try {
-          personnelResponse =
-            await fetchJson(
-              `/api/base-info/personnel?networkId=${networkId}`
-            );
-        } catch (personnelError) {
-          /*
-           * نبود فهرست پرسنل نباید
-           * کل Wizard را متوقف کند.
-           *
-           * عوامل اولیه همچنان نمایش
-           * داده می‌شوند.
-           */
-          console.error(
-            "Personnel request error:",
-            personnelError
+        const jobIds =
+          extractJobIds(
+            rawCrewItems
+          );
+
+
+        if (
+          process.env.NODE_ENV ===
+          "development"
+        ) {
+          console.log(
+            "EXTRACTED CREW JOB IDS:",
+            jobIds
           );
         }
 
 
+        /*
+         * برای هر شغل، انواع فعالیت و پرسنل همان شغل
+         * به‌صورت جداگانه دریافت می‌شوند. شکست یک درخواست
+         * نباید باعث بسته‌شدن کل Wizard شود.
+         */
+        const activityResponses =
+          await Promise.all(
+            jobIds.map(
+              async (jobId) => {
+                try {
+                  return await fetchJson(
+                    "/api/base-info/activity-types" +
+                    `?jobId=${encodeURIComponent(
+                      String(jobId)
+                    )}`
+                  );
+                } catch (activityError) {
+                  console.error(
+                    `Activity types request failed for jobId ${jobId}:`,
+                    activityError
+                  );
+
+                  return {
+                    items: [],
+                  };
+                }
+              }
+            )
+          );
+
+
+        const personnelResponses =
+          await Promise.all(
+            jobIds.map(
+              async (jobId) => {
+                try {
+                  return await fetchJson(
+                    "/api/base-info/personnel" +
+                    `?networkId=${encodeURIComponent(
+                      String(networkId)
+                    )}` +
+                    `&jobId=${encodeURIComponent(
+                      String(jobId)
+                    )}`
+                  );
+                } catch (personnelError) {
+                  console.error(
+                    `Personnel request failed for jobId ${jobId}:`,
+                    personnelError
+                  );
+
+                  return {
+                    items: [],
+                  };
+                }
+              }
+            )
+          );
+
+
         const planDetail =
-          extractObject(
+          extractFirstObject(
             planDetailResponse,
             [
               "data",
+              "Data",
               "detail",
+              "Detail",
               "planDetail",
+              "PlanDetail",
               "result",
+              "Result",
+              "items",
+              "Items",
             ]
           ) ?? {};
 
 
+        if (
+          process.env.NODE_ENV ===
+          "development"
+        ) {
+          console.log(
+            "RAW PLAN DETAIL:",
+            planDetailResponse
+          );
+
+          console.log(
+            "EXTRACTED PLAN DETAIL:",
+            planDetail
+          );
+        }
+
+
+
+        const structureId =
+  getNumber(
+    planDetail,
+    [
+      "StructureProgramId",
+      "structureProgramId",
+
+      "ProgramStructureId",
+      "programStructureId",
+    ]
+  );
+
+
+        const degreeId =
+          getNumber(
+            planDetail,
+            [
+              "ProgramDegreeId",
+              "programDegreeId",
+            ]
+          );
+
+
+        const floorId =
+          getNumber(
+            planDetail,
+            [
+              "FloorPlanId",
+              "floorPlanId",
+            ]
+          );
+
+          const programName =
+            findProgramName(
+              programsResponse,
+              planId
+            );
+
+
+          let structureOptions: Array<{
+  id: number;
+  name: string;
+}> = [];
+
+let degreeOptions: Array<{
+  id: number;
+  name: string;
+}> = [];
+
+
+/*
+ * دریافت نام ساختار
+ */
+try {
+  const structuresResponse =
+    await fetchJson(
+      "/api/base-info/program-structures"
+    );
+
+  structureOptions =
+    normalizeSimpleOptions(
+      extractArray(
+        structuresResponse,
+        [
+          "items",
+          "Items",
+          "data",
+          "Data",
+          "result",
+          "Result",
+        ]
+      )
+    );
+} catch (structureError) {
+  console.error(
+    "Program structures lookup failed:",
+    structureError
+  );
+}
+
+
+/*
+ * دریافت نام درجه براساس ساختار
+ */
+if (
+  structureId !== null &&
+  structureId > 0
+) {
+  try {
+    const degreesResponse =
+      await fetchJson(
+        "/api/base-info/program-degrees" +
+        `?structureId=${encodeURIComponent(
+          String(structureId)
+        )}`
+      );
+
+    degreeOptions =
+      normalizeSimpleOptions(
+        extractArray(
+          degreesResponse,
+          [
+            "items",
+            "Items",
+            "data",
+            "Data",
+            "result",
+            "Result",
+          ]
+        )
+      );
+  } catch (degreeError) {
+    console.error(
+      "Program degrees lookup failed:",
+      degreeError
+    );
+  }
+}   
         const normalizedCrew =
           normalizeCrewMembers(
-            extractArray(
-              crewResponse,
-              [
-                "items",
-                "crewMembers",
-                "data",
-                "result",
-              ]
-            )
+            rawCrewItems
           );
 
 
@@ -435,38 +636,60 @@ export default function IssueProfileDialog({
               itemsResponse,
               [
                 "items",
+                "Items",
                 "planItems",
+                "PlanItems",
                 "data",
+                "Data",
                 "result",
+                "Result",
               ]
             )
           );
 
 
         const normalizedActivities =
-          normalizeSimpleOptions(
-            extractArray(
-              activitiesResponse,
-              [
-                "items",
-                "activityTypes",
-                "data",
-                "result",
-              ]
+          removeDuplicateOptions(
+            activityResponses.flatMap(
+              (activityResponse) =>
+                normalizeSimpleOptions(
+                  extractArray(
+                    activityResponse,
+                    [
+                      "items",
+                      "Items",
+                      "activityTypes",
+                      "ActivityTypes",
+                      "data",
+                      "Data",
+                      "result",
+                      "Result",
+                    ]
+                  )
+                )
             )
           );
 
 
         const normalizedPersonnel =
-          normalizeSimpleOptions(
-            extractArray(
-              personnelResponse,
-              [
-                "items",
-                "personnel",
-                "data",
-                "result",
-              ]
+          removeDuplicateOptions(
+            personnelResponses.flatMap(
+              (personnelResponse) =>
+                normalizeSimpleOptions(
+                  extractArray(
+                    personnelResponse,
+                    [
+                      "items",
+                      "Items",
+                      "personnel",
+                      "Personnel",
+                      "data",
+                      "Data",
+                      "result",
+                      "Result",
+                    ]
+                  )
+                )
             )
           );
 
@@ -501,201 +724,202 @@ export default function IssueProfileDialog({
             ]
           );
 
+const resolvedStructureName =
+  getString(
+    planDetail,
+    [
+      "StructureProgramName",
+      "structureProgramName",
+    ]
+  ) ||
+  findLookupName(
+    structureOptions,
+    structureId
+  );
 
+
+const resolvedDegreeName =
+  getString(
+    planDetail,
+    [
+      "ProgramDegreeName",
+      "programDegreeName",
+    ]
+  ) ||
+  findLookupName(
+    degreeOptions,
+    degreeId
+  );
+
+
+const resolvedFloorName =
+  getString(
+    planDetail,
+    [
+      "FloorPlanName",
+      "floorPlanName",
+    ]
+  ) ||
+  (
+    floorId !== null
+      ? `طبقه شماره ${floorId}`
+      : ""
+  );
+
+  
         /*
          * ساخت FormData مرکزی
          */
         const nextWizardData:
-          ProgramProfileWizardData = {
-          specifications: {
-            forecastId,
+  ProgramProfileWizardData = {
+  specifications: {
+    forecastId:
+      selectedForecastId,
+      
 
-            planId,
+    planId,
+    
 
-            networkId,
+    networkId,
 
-            networkGroupId,
+    networkGroupId,
 
-            programName:
-              getString(
-                planDetail,
-                [
-                  "programName",
-                  "ProgramName",
+    programName:
+  getString(
+    planDetail,
+    [
+      "ProgramName",
+      "programName",
+      "PlanName",
+      "planName",
+    ]
+  ) ||
+  getString(
+    forecast,
+    [
+      "ProgramName",
+      "programName",
+      "PlanName",
+      "planName",
+    ]
+  ) ||
+  programName ||
+  `برنامه شماره ${planId}`,
 
-                  "planName",
-                  "PlanName",
+    mainTopic:
+      getString(
+        forecast,
+        [
+          "mainTopic",
+          "MainTopic",
+        ]
+      ),
 
-                  "title",
-                  "Title",
+    episodeNumber:
+      getNumber(
+        forecast,
+        [
+          "episodeNumber",
+          "EpisodeNumber",
+        ]
+      ),
 
-                  "text",
-                  "Text",
-                ]
-              ) ||
-              getString(
-                forecast,
-                [
-                  "programName",
-                  "planName",
-                ]
-              ),
+    duration:
+      normalizeTimeSpan(
+        getString(
+          planDetail,
+          [
+            "duration",
+            "Duration",
+            "programDuration",
+            "ProgramDuration",
+          ]
+        )
+      ),
 
-            mainTopic:
-              getString(
-                forecast,
-                [
-                  "mainTopic",
-                  "MainTopic",
-                ]
-              ),
+    broadcastDate,
 
-            episodeNumber:
-              getNumber(
-                forecast,
-                [
-                  "episodeNumber",
-                  "EpisodeNumber",
-                ]
-              ),
+    broadcastDateJalali:
+      formatJalaliDate(
+        broadcastDate
+      ),
 
-            duration:
-              normalizeTimeSpan(
-                getString(
-                  planDetail,
-                  [
-                    "duration",
-                    "Duration",
+    productionMethod:
+      getString(
+        planDetail,
+        [
+      "ProgramTypeName",
+      "programTypeName",
 
-                    "programDuration",
-                    "ProgramDuration",
-                  ]
-                )
-              ),
+      "ProductionMethod",
+      "productionMethod",
 
-            broadcastDate,
+      "ProductionTypeName",
+      "productionTypeName",
+    ]
+      ),
 
-            broadcastDateJalali:
-              formatJalaliDate(
-                broadcastDate
-              ),
+    occasion:
+  getString(
+    planDetail,
+    [
+      "ApplicationTypeName",
+      "applicationTypeName",
 
-            productionMethod:
-              getString(
-                planDetail,
-                [
-                  "productionMethod",
-                  "ProductionMethod",
+      "Occasion",
+      "occasion",
+    ]
+  ) ||
+  "بدون مناسبت خاص",
 
-                  "productionType",
-                  "ProductionType",
-                ]
-              ),
+    floorId,
 
-            occasion:
-              getString(
-                planDetail,
-                [
-                  "occasion",
-                  "Occasion",
-                ]
-              ) ||
-              "بدون مناسبت خاص",
+floorName:
+  resolvedFloorName,
 
-            floorId:
-              getNumber(
-                planDetail,
-                [
-                  "floorId",
-                  "FloorId",
-                ]
-              ),
+  programDegreeId:
+  degreeId,
 
-            floorName:
-              getString(
-                planDetail,
-                [
-                  "floorName",
-                  "FloorName",
-                ]
-              ),
+programDegreeName:
+  resolvedDegreeName,
 
-            programDegreeId:
-              getNumber(
-                planDetail,
-                [
-                  "programDegreeId",
-                  "ProgramDegreeId",
-                ]
-              ),
+   programStructureId:
+  structureId,
 
-            programDegreeName:
-              getString(
-                planDetail,
-                [
-                  "programDegreeName",
-                  "ProgramDegreeName",
-                ]
-              ),
+programStructureName:
+  resolvedStructureName,
 
-            programStructureId:
-              getNumber(
-                planDetail,
-                [
-                  "programStructureId",
-                  "ProgramStructureId",
-                ]
-              ),
+    startTime:
+      normalizeClockTime(
+        getString(
+          planDetail,
+          [
+            "startTime",
+            "StartTime",
+            "broadcastTime",
+            "BroadcastTime",
+          ]
+        )
+      ),
 
-            programStructureName:
-              getString(
-                planDetail,
-                [
-                  "programStructureName",
-                  "ProgramStructureName",
-                ]
-              ),
+    hasExpert:
+      getBoolean(
+        forecast,
+        [
+          "hasExpert",
+          "HasExpert",
+        ]
+      ),
+  },
 
-            startTime:
-              normalizeClockTime(
-                getString(
-                  planDetail,
-                  [
-                    "startTime",
-                    "StartTime",
+  crewMembers:
+    normalizedCrew,
 
-                    "broadcastTime",
-                    "BroadcastTime",
-                  ]
-                )
-              ),
+  items:
+    normalizedItems,
 
-            hasExpert:
-              getBoolean(
-                forecast,
-                [
-                  "hasExpert",
-                  "HasExpert",
-                ]
-              ),
-          },
-
-          crewMembers:
-            normalizedCrew,
-
-          items:
-            normalizedItems,
-
-          /*
-           * کارشناس به محور موضوعی،
-           * مدت و نحوه حضور نیاز دارد.
-           * این اطلاعات در Forecast وجود
-           * ندارد؛ بنابراین کاربر در مرحله
-           * چهارم آن را تکمیل می‌کند.
-           */
-          experts: [],
-        };
-
+  experts: [],
+};
 
         if (!cancelled) {
           setWizardData(
@@ -1294,9 +1518,8 @@ function normalizeCrewMembers(
           [
             "activityTypeId",
             "ActivityTypeId",
-
-            "jobId",
-            "JobId",
+            "activityId",
+            "ActivityId",
           ]
         );
 
@@ -1319,9 +1542,7 @@ function normalizeCrewMembers(
 
       if (
         personnelId === null ||
-        !personnelName ||
-        activityTypeId === null ||
-        !activityTypeName
+        !personnelName
       ) {
         return [];
       }
@@ -1333,9 +1554,11 @@ function normalizeCrewMembers(
 
           personnelName,
 
-          activityTypeId,
+          activityTypeId:
+            activityTypeId ?? 0,
 
-          activityTypeName,
+          activityTypeName:
+            activityTypeName || "",
 
           isPresent:
             getBoolean(
@@ -1681,6 +1904,8 @@ function mergeCrewWithActivities(
 
   for (const member of crew) {
     if (
+      member.activityTypeId > 0 &&
+      member.activityTypeName.trim() &&
       !result.some(
         (item) =>
           item.id ===
@@ -1699,6 +1924,167 @@ function mergeCrewWithActivities(
 
 
   return result;
+}
+
+
+/*
+ * استخراج اولین Object از پاسخ مستقیم یا Wrapperهای
+ * استاندارد سرویس اطلاعات پایه، از جمله Data: [{}].
+ */
+function extractFirstObject(
+  value: unknown,
+  fields: string[]
+): UnknownRecord | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const result =
+        extractFirstObject(
+          item,
+          fields
+        );
+
+      if (result) {
+        return result;
+      }
+    }
+
+    return null;
+  }
+
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+
+  if (
+    hasAnyProperty(
+      value,
+      [
+        "planId",
+        "PlanId",
+        "programName",
+        "ProgramName",
+        "planName",
+        "PlanName",
+        "productionMethod",
+        "ProductionMethod",
+        "productionType",
+        "ProductionType",
+        "floorId",
+        "FloorId",
+        "degreeId",
+        "DegreeId",
+        "programDegreeId",
+        "ProgramDegreeId",
+        "structureId",
+        "StructureId",
+        "programStructureId",
+        "ProgramStructureId",
+      ]
+    )
+  ) {
+    return value;
+  }
+
+
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+    if (
+      Array.isArray(fieldValue) ||
+      isRecord(fieldValue)
+    ) {
+      const result =
+        extractFirstObject(
+          fieldValue,
+          fields
+        );
+
+      if (result) {
+        return result;
+      }
+    }
+  }
+
+
+  return null;
+}
+
+
+/*
+ * jobId از خروجی estimateDetail/{planId} استخراج می‌شود.
+ * غلط املایی bussiness نیز برای سازگاری با Backend پوشش
+ * داده شده است.
+ */
+function extractJobIds(
+  crewItems: unknown[]
+): number[] {
+  const jobIds =
+    crewItems.flatMap(
+      (item) => {
+        if (!isRecord(item)) {
+          return [];
+        }
+
+        const jobId =
+          getNumber(
+            item,
+            [
+              "jobId",
+              "JobId",
+              "businessTypeId",
+              "BusinessTypeId",
+              "bussinessTypeId",
+              "BussinessTypeId",
+            ]
+          );
+
+        return (
+          jobId !== null &&
+          jobId > 0
+        )
+          ? [jobId]
+          : [];
+      }
+    );
+
+  return Array.from(
+    new Set(jobIds)
+  );
+}
+
+
+function removeDuplicateOptions<
+  T extends {
+    id: number;
+    name: string;
+  }
+>(
+  options: T[]
+): T[] {
+  return Array.from(
+    new Map(
+      options.map(
+        (option) => [
+          option.id,
+          option,
+        ]
+      )
+    ).values()
+  );
+}
+
+
+function hasAnyProperty(
+  value: UnknownRecord,
+  propertyNames: string[]
+): boolean {
+  return propertyNames.some(
+    (propertyName) =>
+      propertyName in value
+  );
 }
 
 
@@ -1977,6 +2363,92 @@ function normalizeDigits(
 }
 
 
+function findProgramName(
+  response: unknown,
+  planId: number
+): string {
+  const programItems =
+    extractArray(
+      response,
+      [
+        "programs",
+        "Programs",
+
+        "items",
+        "Items",
+
+        "data",
+        "Data",
+
+        "result",
+        "Result",
+      ]
+    );
+
+
+  for (
+    const item of
+    programItems
+  ) {
+    if (!isRecord(item)) {
+      continue;
+    }
+
+
+    const itemId =
+      getNumber(
+        item,
+        [
+          "id",
+          "Id",
+
+          "planId",
+          "PlanId",
+
+          "value",
+          "Value",
+        ]
+      );
+
+
+    if (
+      itemId !== planId
+    ) {
+      continue;
+    }
+
+
+    const itemName =
+      getString(
+        item,
+        [
+          "name",
+          "Name",
+
+          "planName",
+          "PlanName",
+
+          "programName",
+          "ProgramName",
+
+          "text",
+          "Text",
+
+          "title",
+          "Title",
+        ]
+      );
+
+
+    if (itemName) {
+      return itemName;
+    }
+  }
+
+
+  return "";
+}
+
 function isRecord(
   value: unknown
 ): value is UnknownRecord {
@@ -1985,5 +2457,29 @@ function isRecord(
       "object" &&
     value !== null &&
     !Array.isArray(value)
+  );
+}
+
+function findLookupName(
+  options: Array<{
+    id: number;
+    name: string;
+  }>,
+
+  selectedId:
+    number | null
+): string {
+  if (selectedId === null) {
+    return "";
+  }
+
+
+  return (
+    options.find(
+      (option) =>
+        option.id ===
+        selectedId
+    )?.name ??
+    ""
   );
 }

@@ -3,28 +3,66 @@ import {
 } from "next/server";
 
 
+/*
+ * آدرس وب‌سرویس اطلاعات پایه
+ *
+ * مقدار داخل .env.local در اولویت است.
+ */
 const BASE_INFO_API_URL =
   process.env.BASE_INFO_API_URL ??
   "http://172.16.60.34/api/v1/baseinfo";
 
 
 /*
- * GET /api/base-info/activity-types
+ * GET /api/base-info/activity-types?jobId=1
  *
- * دریافت انواع فعالیت از
- * وب‌سرویس اطلاعات پایه
+ * آدرس Backend:
+ * GET /activityTypes/{jobId}
  */
-export async function GET() {
+export async function GET(
+  request: Request
+) {
   try {
     /*
-     * کلید وب‌سرویس اطلاعات پایه
+     * دریافت jobId از Query String
+     */
+    const requestUrl =
+      new URL(request.url);
+
+    const jobIdParameter =
+      requestUrl.searchParams.get(
+        "jobId"
+      );
+
+    const jobId =
+      parsePositiveInteger(
+        jobIdParameter
+      );
+
+
+    if (jobId === null) {
+      return NextResponse.json(
+        {
+          message:
+            "شناسه شغل برای دریافت انواع فعالیت الزامی و باید یک عدد مثبت باشد.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+
+    /*
+     * دریافت کلید وب‌سرویس اطلاعات پایه
      */
     const apiKey =
       process.env
-        .BASE_INFO_API_KEY;
+        .BASE_INFO_API_KEY
+        ?.trim();
 
 
-    if (!apiKey?.trim()) {
+    if (!apiKey) {
       return NextResponse.json(
         {
           message:
@@ -38,28 +76,31 @@ export async function GET() {
 
 
     /*
-     * ساخت آدرس Backend
+     * ساخت URL نهایی Backend
+     *
+     * نمونه:
+     * http://172.16.60.34/api/v1/baseinfo/activityTypes/1
      */
     const backendUrl =
       `${removeTrailingSlash(
         BASE_INFO_API_URL
-      )}` +
-      "/activityTypes";
+      )}/activityTypes/${encodeURIComponent(
+        String(jobId)
+      )}`;
 
 
     const backendResponse =
       await fetch(
         backendUrl,
         {
-          method:
-            "GET",
+          method: "GET",
 
           headers: {
             Accept:
               "application/json",
 
             "X-API-KEY":
-              apiKey.trim(),
+              apiKey,
           },
 
           cache:
@@ -68,9 +109,12 @@ export async function GET() {
       );
 
 
+    /*
+     * دریافت پاسخ به‌صورت Text
+     * برای پشتیبانی از پاسخ خالی یا غیر JSON
+     */
     const responseText =
       await backendResponse.text();
-
 
     const responseData =
       parseJsonResponse(
@@ -78,6 +122,9 @@ export async function GET() {
       );
 
 
+    /*
+     * نمایش جزئیات فقط در محیط Development
+     */
     if (
       process.env.NODE_ENV ===
       "development"
@@ -85,6 +132,8 @@ export async function GET() {
       console.log(
         "ACTIVITY TYPES RESPONSE:",
         {
+          jobId,
+
           backendUrl,
 
           status:
@@ -99,7 +148,7 @@ export async function GET() {
 
 
     /*
-     * پاسخ ناموفق سرویس
+     * پاسخ ناموفق Backend
      */
     if (!backendResponse.ok) {
       return NextResponse.json(
@@ -110,8 +159,7 @@ export async function GET() {
             ) ??
             (
               "دریافت انواع فعالیت انجام نشد. " +
-              "کد پاسخ وب‌سرویس: " +
-              backendResponse.status
+              `کد پاسخ وب‌سرویس: ${backendResponse.status}`
             ),
 
           details:
@@ -130,7 +178,7 @@ export async function GET() {
 
 
     /*
-     * پاسخ خالی
+     * Backend ممکن است پاسخ خالی برگرداند.
      */
     if (!responseText.trim()) {
       return NextResponse.json(
@@ -145,7 +193,7 @@ export async function GET() {
 
 
     /*
-     * پاسخ غیر JSON
+     * پاسخ موفق باید JSON باشد.
      */
     if (responseData === null) {
       return NextResponse.json(
@@ -167,7 +215,7 @@ export async function GET() {
 
 
     /*
-     * استخراج آرایه از پاسخ
+     * استخراج آرایه از ساختارهای مختلف پاسخ
      */
     const rawItems =
       extractArray(
@@ -175,30 +223,29 @@ export async function GET() {
       );
 
 
+    /*
+     * به‌جای سخت‌گیری روی ساختار پاسخ،
+     * اگر آرایه پیدا نشد لیست خالی برمی‌گردانیم.
+     */
     if (rawItems === null) {
       console.error(
-        "Invalid activity types response:",
+        "Activity types array not found:",
         responseData
       );
 
-
       return NextResponse.json(
         {
-          message:
-            "فهرست انواع فعالیت در پاسخ وب‌سرویس پیدا نشد.",
-
-          details:
-            responseData,
+          items: [],
         },
         {
-          status: 502,
+          status: 200,
         }
       );
     }
 
 
     /*
-     * تبدیل پاسخ سرویس به:
+     * تبدیل پاسخ Backend به ساختار ثابت Frontend:
      *
      * {
      *   id: number,
@@ -221,10 +268,26 @@ export async function GET() {
         );
 
 
+    /*
+     * حذف گزینه‌های تکراری
+     */
+    const uniqueActivityTypes =
+      Array.from(
+        new Map(
+          activityTypes.map(
+            (activityType) => [
+              activityType.id,
+              activityType,
+            ]
+          )
+        ).values()
+      );
+
+
     return NextResponse.json(
       {
         items:
-          activityTypes,
+          uniqueActivityTypes,
       },
       {
         status: 200,
@@ -240,7 +303,9 @@ export async function GET() {
     return NextResponse.json(
       {
         message:
-          "ارتباط با وب‌سرویس انواع فعالیت برقرار نشد.",
+          error instanceof Error
+            ? error.message
+            : "ارتباط با وب‌سرویس انواع فعالیت برقرار نشد.",
       },
       {
         status: 500,
@@ -251,8 +316,8 @@ export async function GET() {
 
 
 /*
- * تبدیل ساختارهای مختلف پاسخ
- * به مدل یکپارچه Frontend
+ * تبدیل ساختار هر Activity Type
+ * به مدل مورد استفاده Frontend
  */
 function normalizeActivityOption(
   value: unknown
@@ -316,8 +381,13 @@ function normalizeActivityOption(
 
 
 /*
- * پاسخ سرویس ممکن است مستقیماً
- * آرایه یا داخل یک Property باشد.
+ * پاسخ ممکن است:
+ *
+ * 1. مستقیماً آرایه باشد.
+ * 2. داخل items باشد.
+ * 3. داخل data باشد.
+ * 4. داخل result باشد.
+ * 5. به‌صورت تو در تو برگردد.
  */
 function extractArray(
   value: unknown
@@ -361,25 +431,57 @@ function extractArray(
 
 
     if (isRecord(fieldValue)) {
-      const nestedItems =
-        fieldValue.items ??
-        fieldValue.Items ??
-        fieldValue.activityTypes ??
-        fieldValue.ActivityTypes;
+      const nestedArray =
+        extractArray(
+          fieldValue
+        );
 
 
-      if (
-        Array.isArray(
-          nestedItems
-        )
-      ) {
-        return nestedItems;
+      if (nestedArray !== null) {
+        return nestedArray;
       }
     }
   }
 
 
   return null;
+}
+
+
+/*
+ * تبدیل jobId به عدد مثبت
+ */
+function parsePositiveInteger(
+  value: string | null
+): number | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+
+  const normalizedValue =
+    normalizeDigits(
+      value.trim()
+    );
+
+
+  const numericValue =
+    Number(
+      normalizedValue
+    );
+
+
+  if (
+    !Number.isInteger(
+      numericValue
+    ) ||
+    numericValue <= 0
+  ) {
+    return null;
+  }
+
+
+  return numericValue;
 }
 
 
@@ -391,6 +493,7 @@ function getFirstPositiveInteger(
     string,
     unknown
   >,
+
   propertyNames:
     string[]
 ): number | null {
@@ -433,13 +536,14 @@ function getFirstPositiveInteger(
 
 
 /*
- * دریافت اولین عنوان معتبر
+ * دریافت اولین نام معتبر
  */
 function getFirstString(
   value: Record<
     string,
     unknown
   >,
+
   propertyNames:
     string[]
 ): string {
@@ -466,13 +570,16 @@ function getFirstString(
 
 
 /*
- * استخراج پیام خطا
+ * استخراج پیام خطای Backend
  */
 function getErrorMessage(
   value: unknown
 ): string | null {
   if (!isRecord(value)) {
-    return null;
+    return typeof value ===
+      "string"
+      ? value
+      : null;
   }
 
 
@@ -484,7 +591,13 @@ function getErrorMessage(
     "Description",
 
     "detail",
+    "Detail",
+
+    "messageDetail",
     "MessageDetail",
+
+    "title",
+    "Title",
   ];
 
 
@@ -501,7 +614,7 @@ function getErrorMessage(
         "string" &&
       fieldValue.trim()
     ) {
-      return fieldValue;
+      return fieldValue.trim();
     }
   }
 
@@ -546,7 +659,7 @@ function removeTrailingSlash(
 
 /*
  * تبدیل اعداد فارسی و عربی
- * به انگلیسی
+ * به اعداد انگلیسی
  */
 function normalizeDigits(
   value: string

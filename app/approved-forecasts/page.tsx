@@ -13,6 +13,7 @@ import {
   FilePlus2,
   LoaderCircle,
   MoreVertical,
+  CheckCircle2,
   RotateCcw,
   Search,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import {
 import {
   useRouter,
 } from "next/navigation";
+
 
 import type {
   ForecastResponse,
@@ -132,6 +134,35 @@ export default function ApprovedForecastsPage() {
     setError,
   ] = useState("");
 
+/*
+ * Forecast انتخاب‌شده برای
+ * صدور شناسنامه
+ */
+const [
+  selectedForecastId,
+  setSelectedForecastId,
+] = useState<string | null>(
+  null
+);
+
+
+/*
+ * برای تازه‌سازی لیست بعد
+ * از صدور شناسنامه
+ */
+const [
+  refreshKey,
+  setRefreshKey,
+] = useState(0);
+
+
+/*
+ * پیام موفقیت
+ */
+const [
+  issueSuccessMessage,
+  setIssueSuccessMessage,
+] = useState("");
 
   /*
    * دریافت فقط Forecastهای تأییدشده
@@ -305,6 +336,7 @@ if (
     };
   }, []);
 
+
 function handleApplyFilters() {
   setError("");
 
@@ -371,8 +403,67 @@ function handleIssueProfile(
     forecast
   );
 }
- 
+
+ //open-modal
+function handleOpenIssueDialog(
+  forecastId: string
+) {
+  setIssueSuccessMessage("");
+
+  setSelectedForecastId(
+    forecastId
+  );
+}
+
+//close-modal
+function handleCloseIssueDialog() {
+  setSelectedForecastId(
+    null
+  );
+}
+
+//صدور موفق شناسنامه
+function handleProfileIssued(
+  _profileId: string
+) {
+  /*
+   * بستن Modal
+   */
+  setSelectedForecastId(
+    null
+  );
+
+  /*
+   * نمایش پیام
+   */
+  setIssueSuccessMessage(
+    "شناسنامه با موفقیت صادر شد."
+  );
+
+  /*
+   * دریافت مجدد موضوعات از Backend
+   */
+  setRefreshKey(
+    (previous) =>
+      previous + 1
+  );
+
+
+  /*
+   * حذف خودکار پیام
+   */
+  window.setTimeout(
+    () => {
+      setIssueSuccessMessage("");
+    },
+    4000
+  );
+}
+
+//main
+
   return (
+  <>
     <main
       className="
         min-h-screen
@@ -596,6 +687,30 @@ function handleIssueProfile(
             </button>
           </div>
         </section>
+
+        {issueSuccessMessage && (
+          <div
+            className="
+              mb-5
+              flex
+              items-center
+              gap-3
+              rounded-xl
+              border border-green-200
+              bg-green-50
+              px-4 py-3
+              text-sm
+              font-semibold
+              text-green-700
+            "
+          >
+            <CheckCircle2
+              size={20}
+            />
+
+            {issueSuccessMessage}
+          </div>
+        )}
 
 
         {error && (
@@ -860,14 +975,19 @@ function handleIssueProfile(
                                   shadow-xl
                                 "
                               >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                              handleIssueProfile(
-                                                forecast
-                                              )
-                                            }
-                                  className="
+                               <button
+  type="button"
+  onClick={() => {
+    setSelectedForecastId(
+      forecast.id
+    );
+
+    /*
+     * اگر برای منوی سه‌نقطه State داری
+     */
+    setOpenMenuId(null);
+  }}
+  className="
                                     flex
                                     w-full
                                     items-center
@@ -881,13 +1001,9 @@ function handleIssueProfile(
                                     hover:bg-blue-50
                                     hover:text-[#007fcf]
                                   "
-                                >
-                                  <FilePlus2
-                                    size={18}
-                                  />
-
-                                  تبدیل به شناسنامه
-                                </button>
+>
+  تبدیل به شناسنامه
+</button>
                               </div>
                             )}
                           </div>
@@ -995,51 +1111,31 @@ function handleIssueProfile(
             )}
         </section>
       </section>
-      {selectedForecast && (
-  <IssueProgramProfileDialog
-    forecast={
-      selectedForecast
-    }
-    onClose={() =>
-      setSelectedForecast(
-        null
-      )
-    }
-    onIssued={(
-      issuedForecastId
-    ) => {
-      /*
-       * از جدول فعلی حذف می‌شود تا
-       * دوباره برای آن شناسنامه صادر نشود.
-       */
-      setForecasts(
-        (previous) =>
-          previous.filter(
-            (forecast) =>
-              forecast.id !==
-              issuedForecastId
-          )
-      );
+</main>
 
-      setSelectedForecast(
-        null
-      );
+      <IssueProgramProfileDialog
+         isOpen={
+          selectedForecastId !==
+          null
+        }
 
-      /*
-       * بعد از ثبت موفق، به لیست
-       * شناسنامه‌ها منتقل می‌شود.
-       */
-      router.push(
-        "/program-profiles"
-      );
+        forecastId={
+          selectedForecastId
+        }
 
-      router.refresh();
-    }}
-  />
-)}
-    </main>
+        onClose={
+          handleCloseIssueDialog
+        }
+
+        onIssued={
+          handleProfileIssued
+        }
+      />
+    </>
   );
 }
+
+
 
 
 function isApprovedForecastListResponse(
