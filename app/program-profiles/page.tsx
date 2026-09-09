@@ -3,8 +3,13 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
+
+import {
+  useRouter,
+} from "next/navigation";
 
 import DatePicker from
   "react-multi-date-picker";
@@ -27,10 +32,15 @@ import gregorianEn from
 import {
   AlertCircle,
   CalendarDays,
+  CheckCircle2,
+  Eye,
   FileText,
   LoaderCircle,
+  MoreVertical,
   RotateCcw,
   Search,
+  Send,
+  X,
 } from "lucide-react";
 
 import type {
@@ -45,6 +55,14 @@ const PAGE_SIZE =
 
 
 export default function ProgramProfilesPage() {
+  const router =
+    useRouter();
+
+  const menuContainerRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
   const [
     profiles,
     setProfiles,
@@ -97,6 +115,30 @@ export default function ProgramProfilesPage() {
     error,
     setError,
   ] = useState("");
+
+  const [
+    successMessage,
+    setSuccessMessage,
+  ] = useState("");
+
+  const [
+    openMenuId,
+    setOpenMenuId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    submitProfile,
+    setSubmitProfile,
+  ] = useState<
+    ProgramProfileResponse | null
+  >(null);
+
+  const [
+    isSubmitting,
+    setIsSubmitting,
+  ] = useState(false);
 
 
   const loadProfiles =
@@ -226,6 +268,40 @@ export default function ProgramProfilesPage() {
   }, [loadProfiles]);
 
 
+  /*
+   * بستن منوی عملیات با کلیک خارج از آن
+   */
+  useEffect(() => {
+    function handleOutsideClick(
+      event: MouseEvent
+    ) {
+      if (
+        menuContainerRef.current &&
+        !menuContainerRef.current
+          .contains(
+            event.target as Node
+          )
+      ) {
+        setOpenMenuId(null);
+      }
+    }
+
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
+
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+    };
+  }, []);
+
+
   function handleApplyFilters() {
     setError("");
 
@@ -279,6 +355,94 @@ export default function ProgramProfilesPage() {
 
     setCurrentPage(1);
     setError("");
+  }
+
+
+  function handleViewProfile(
+    profileId: string
+  ) {
+    setOpenMenuId(null);
+
+    router.push(
+      `/program-profiles/${encodeURIComponent(
+        profileId
+      )}`
+    );
+  }
+
+
+  async function handleSubmitForReview() {
+    if (
+      !submitProfile ||
+      isSubmitting
+    ) {
+      return;
+    }
+
+
+    try {
+      setIsSubmitting(true);
+      setError("");
+      setSuccessMessage("");
+
+
+      const response =
+        await fetch(
+          `/api/program-profiles/${encodeURIComponent(
+            submitProfile.id
+          )}/submit`,
+          {
+            method: "POST",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+
+            cache:
+              "no-store",
+          }
+        );
+
+
+      const responseText =
+        await response.text();
+
+      const responseData =
+        parseJsonResponse(
+          responseText
+        );
+
+
+      if (!response.ok) {
+        throw new Error(
+          getErrorMessage(
+            responseData
+          ) ??
+          (
+            "ارسال شناسنامه برای مدیر انجام نشد. " +
+            `کد پاسخ: ${response.status}`
+          )
+        );
+      }
+
+
+      setSubmitProfile(null);
+
+      setSuccessMessage(
+        "شناسنامه با موفقیت برای مدیر ارسال شد."
+      );
+
+      await loadProfiles();
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "ارسال شناسنامه برای مدیر انجام نشد."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
 
@@ -524,6 +688,32 @@ export default function ProgramProfilesPage() {
         )}
 
 
+        {successMessage && (
+          <div
+            role="status"
+            className="
+              mb-6
+              flex
+              items-start
+              gap-3
+              rounded-xl
+              border
+              border-green-200
+              bg-green-50
+              p-4
+              text-green-700
+            "
+          >
+            <CheckCircle2
+              size={21}
+              className="shrink-0"
+            />
+
+            {successMessage}
+          </div>
+        )}
+
+
         <section
           className="
             min-w-0
@@ -642,6 +832,10 @@ export default function ProgramProfilesPage() {
                     <th className={headerClass}>
                       ثبت‌کننده
                     </th>
+
+                    <th className={headerClass}>
+                      عملیات
+                    </th>
                   </tr>
                 </thead>
 
@@ -729,6 +923,141 @@ export default function ProgramProfilesPage() {
                         <td className={cellClass}>
                           {profile.createdByUserName ||
                             "—"}
+                        </td>
+
+                        <td
+                          className={cellClass}
+                        >
+                          <div
+                            ref={
+                              openMenuId ===
+                              profile.id
+                                ? menuContainerRef
+                                : null
+                            }
+                            className="relative"
+                            onMouseDown={(
+                              event
+                            ) =>
+                              event.stopPropagation()
+                            }
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSuccessMessage("");
+
+                                setOpenMenuId(
+                                  (previous) =>
+                                    previous ===
+                                    profile.id
+                                      ? null
+                                      : profile.id
+                                );
+                              }}
+                              className="
+                                inline-flex
+                                h-9 w-9
+                                items-center
+                                justify-center
+                                rounded-lg
+                                text-gray-500
+                                transition
+                                hover:bg-blue-50
+                                hover:text-[#007fcf]
+                              "
+                              aria-label="نمایش عملیات شناسنامه"
+                              aria-expanded={
+                                openMenuId ===
+                                profile.id
+                              }
+                            >
+                              <MoreVertical
+                                size={20}
+                              />
+                            </button>
+
+
+                            {openMenuId ===
+                              profile.id && (
+                              <div
+                                className={`
+                                  absolute
+                                  left-0
+                                  z-40
+                                  w-48
+                                  overflow-hidden
+                                  rounded-xl
+                                  border
+                                  border-gray-200
+                                  bg-white
+                                  py-1
+                                  shadow-xl
+                                  ${
+                                    index >=
+                                    profiles.length - 2
+                                      ? "bottom-full mb-1"
+                                      : "top-full mt-1"
+                                  }
+                                `}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleViewProfile(
+                                      profile.id
+                                    )
+                                  }
+                                  className="
+                                    flex
+                                    w-full
+                                    items-center
+                                    gap-2
+                                    px-4 py-2.5
+                                    text-right
+                                    text-sm
+                                    text-gray-700
+                                    transition
+                                    hover:bg-blue-50
+                                    hover:text-[#007fcf]
+                                  "
+                                >
+                                  <Eye size={17} />
+
+                                  مشاهده
+                                </button>
+
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenMenuId(null);
+                                    setError("");
+                                    setSuccessMessage("");
+                                    setSubmitProfile(
+                                      profile
+                                    );
+                                  }}
+                                  className="
+                                    flex
+                                    w-full
+                                    items-center
+                                    gap-2
+                                    px-4 py-2.5
+                                    text-right
+                                    text-sm
+                                    text-[#007fcf]
+                                    transition
+                                    hover:bg-blue-50
+                                  "
+                                >
+                                  <Send size={17} />
+
+                                  ارسال برای مدیر
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
@@ -831,6 +1160,187 @@ export default function ProgramProfilesPage() {
             )}
         </section>
       </section>
+
+
+      {submitProfile && (
+        <div
+          className="
+            fixed
+            inset-0
+            z-[80]
+            flex
+            items-center
+            justify-center
+            bg-black/50
+            p-4
+          "
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="submit-profile-title"
+          onMouseDown={() => {
+            if (!isSubmitting) {
+              setSubmitProfile(null);
+            }
+          }}
+        >
+          <div
+            className="
+              w-full
+              max-w-md
+              rounded-2xl
+              border
+              border-gray-200
+              bg-white
+              p-6
+              shadow-2xl
+            "
+            onMouseDown={(
+              event
+            ) =>
+              event.stopPropagation()
+            }
+          >
+            <div
+              className="
+                flex
+                items-start
+                justify-between
+                gap-4
+              "
+            >
+              <div>
+                <h2
+                  id="submit-profile-title"
+                  className="
+                    text-lg
+                    font-bold
+                    text-gray-800
+                  "
+                >
+                  ارسال شناسنامه برای مدیر
+                </h2>
+
+                <p
+                  className="
+                    mt-2
+                    text-sm
+                    leading-7
+                    text-gray-500
+                  "
+                >
+                  آیا از ارسال شناسنامه موضوع
+
+                  <span
+                    className="
+                      mx-1
+                      font-bold
+                      text-gray-700
+                    "
+                  >
+                    {submitProfile.mainTopic}
+                  </span>
+
+                  برای مدیر اطمینان دارید؟
+                </p>
+              </div>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  setSubmitProfile(null)
+                }
+                disabled={isSubmitting}
+                className="
+                  rounded-lg
+                  p-2
+                  text-gray-400
+                  transition
+                  hover:bg-gray-100
+                  hover:text-gray-700
+                  disabled:opacity-40
+                "
+                aria-label="بستن پنجره"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+
+            <div
+              className="
+                mt-6
+                flex
+                items-center
+                justify-between
+                gap-3
+                border-t
+                border-gray-200
+                pt-5
+              "
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setSubmitProfile(null)
+                }
+                disabled={isSubmitting}
+                className="
+                  rounded-lg
+                  border
+                  border-gray-300
+                  bg-white
+                  px-5 py-2.5
+                  font-semibold
+                  text-gray-700
+                  transition
+                  hover:bg-gray-50
+                  disabled:opacity-40
+                "
+              >
+                خیر
+              </button>
+
+
+              <button
+                type="button"
+                onClick={() =>
+                  void handleSubmitForReview()
+                }
+                disabled={isSubmitting}
+                className="
+                  inline-flex
+                  items-center
+                  justify-center
+                  gap-2
+                  rounded-lg
+                  bg-[#007fcf]
+                  px-5 py-2.5
+                  font-semibold
+                  text-white
+                  transition
+                  hover:bg-[#006bab]
+                  disabled:cursor-not-allowed
+                  disabled:opacity-60
+                "
+              >
+                {isSubmitting ? (
+                  <LoaderCircle
+                    size={18}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Send size={18} />
+                )}
+
+                {isSubmitting
+                  ? "در حال ارسال..."
+                  : "بله، ارسال شود"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

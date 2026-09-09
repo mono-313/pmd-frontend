@@ -266,7 +266,7 @@ export default function LoginPage() {
               width={200}
               height={200}
               priority
-              className="rounded-full object-cover"
+              className="rounded-2xl object-cover"
             />
         </div>
 
@@ -373,7 +373,7 @@ export default function LoginPage() {
           <div className={styles.captchaRow}>
             <div className={styles.field}>
               <label htmlFor="captcha">
-               کپچا
+                پاسخ عبارت:
               </label>
 
               <input

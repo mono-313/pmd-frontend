@@ -17,12 +17,6 @@ import type {
 } from "@/app/types/auth";
 
 
-/*
- * اطلاعاتی که صفحه ثبت‌نام ارسال می‌کند.
- *
- * roles از فرم دریافت نمی‌شود و
- * داخل Route Handler تعیین خواهد شد.
- */
 type ClientRegisterRequest = Omit<
   RegisterRequest,
   "roles"
@@ -116,12 +110,6 @@ export async function POST(
     }
 
 
-    /*
-     * نقش از فرم گرفته نمی‌شود.
-     *
-     * کاربر جدید همیشه با نقش User
-     * برای Backend ارسال می‌شود.
-     */
     const backendBody:
       RegisterRequest = {
         fullName:
@@ -309,11 +297,7 @@ export async function POST(
         7 * 24 * 60 * 60,
     });
 
-
-    /*
-     * این اطلاعات امن هستند و می‌توانند
-     * در localStorage ذخیره شوند.
-     */
+//اطلاعات امن شد
     const safeSession:
       SafeUserSession = {
         userName:
@@ -336,10 +320,6 @@ export async function POST(
       };
 
 
-    /*
-     * این پاسخ توسط صفحه ثبت‌نام دریافت
-     * و داخل pmd-user-session ذخیره می‌شود.
-     */
     return NextResponse.json(
       safeSession,
       {
@@ -352,11 +332,6 @@ export async function POST(
       error
     );
 
-
-    /*
-     * اگر JSON ارسال‌شده از Frontend
-     * معتبر نباشد.
-     */
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         {
@@ -368,7 +343,6 @@ export async function POST(
         }
       );
     }
-
 
     return NextResponse.json(
       {
@@ -605,15 +579,6 @@ function getRegisterErrorMessage(
 }
 
 
-/*
- * استخراج خطاهای Validation
- *
- * پشتیبانی از ساختار:
- *
- * errors: {
- *   email: ["Email is invalid"]
- * }
- */
 function getValidationErrorMessage(
   errors: unknown
 ): string | null {

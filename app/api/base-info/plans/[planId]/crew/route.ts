@@ -16,9 +16,6 @@ const BASE_INFO_API_URL =
 
 
 /*
- * GET
- * /api/base-info/plans/{planId}/crew
- *
  * دریافت عوامل یک برنامه از
  * وب‌سرویس اطلاعات پایه
  */
@@ -64,10 +61,6 @@ export async function GET(
       );
     }
 
-
-    /*
-     * کلید سرویس اطلاعات پایه
-     */
     const apiKey =
       process.env
         .BASE_INFO_API_KEY;
@@ -88,8 +81,6 @@ export async function GET(
 
     /*
      * آدرس نهایی Backend
-     *
-     * planId باید در Path قرار بگیرد.
      */
     const backendUrl =
       `${removeTrailingSlash(
@@ -119,10 +110,6 @@ export async function GET(
       );
 
 
-    /*
-     * پاسخ ابتدا به صورت Text
-     * خوانده می‌شود.
-     */
     const responseText =
       await backendResponse.text();
 
@@ -189,9 +176,6 @@ export async function GET(
 
     /*
      * پاسخ خالی
-     *
-     * خالی بودن فهرست عوامل
-     * لزوماً خطا نیست.
      */
     if (!responseText.trim()) {
       return NextResponse.json(
@@ -228,7 +212,7 @@ export async function GET(
 
 
     /*
-     * استخراج غیرسخت‌گیرانه آرایه عوامل
+     * استخراج آرایه عوامل
      */
     const crewMembers =
       extractArray(
@@ -290,23 +274,6 @@ export async function GET(
 }
 
 
-/*
- * پاسخ سرویس ممکن است:
- *
- * [...]
- *
- * یا:
- * {
- *   items: [...]
- * }
- *
- * یا:
- * {
- *   data: [...]
- * }
- *
- * باشد.
- */
 function extractArray(
   value: unknown
 ): unknown[] | null {
@@ -345,12 +312,6 @@ function extractArray(
     }
 
 
-    /*
-     * پشتیبانی از:
-     * data: {
-     *   items: [...]
-     * }
-     */
     if (isRecord(fieldValue)) {
       const nestedItems =
         fieldValue.items ??
@@ -374,9 +335,6 @@ function extractArray(
 }
 
 
-/*
- * تبدیل امن پاسخ Text به JSON
- */
 function parseJsonResponse(
   responseText: string
 ): unknown | null {
@@ -439,8 +397,7 @@ function getErrorMessage(
 
 
 /*
- * حذف Slash انتهای آدرس
- */
+ * حذف Slash */
 function removeTrailingSlash(
   value: string
 ): string {

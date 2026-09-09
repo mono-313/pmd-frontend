@@ -48,6 +48,13 @@ export default function ForecastListPage() {
     setForecasts,
   ] = useState<ForecastResponse[]>([]);
 
+
+  const [
+  programNames,
+  setProgramNames,
+  ] = useState<Record<number, string>>({});
+
+
   const [
     pagination,
     setPagination,
@@ -175,11 +182,88 @@ export default function ForecastListPage() {
     );
 
 
+    
+
+
+
   useEffect(() => {
     loadForecasts(1);
   }, [
     loadForecasts,
   ]);
+
+  const loadPrograms =
+  useCallback(async () => {
+    try {
+      const response =
+        await fetch(
+          "/api/programs",
+          {
+            method: "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+
+            cache: "no-store",
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      const responseData =
+        parseJsonResponse(
+          responseText
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          getMessage(
+            responseData
+          ) ??
+          `دریافت برنامه‌ها انجام نشد. کد پاسخ: ${response.status}`
+        );
+      }
+
+      const programs =
+        extractPrograms(
+          responseData
+        );
+
+      const nextProgramNames:
+        Record<number, string> = {};
+
+      programs.forEach(
+        (program) => {
+          nextProgramNames[
+            program.id
+          ] = program.name;
+        }
+      );
+
+      setProgramNames(
+        nextProgramNames
+      );
+    } catch (programsError) {
+      console.error(
+        "Load programs error:",
+        programsError
+      );
+
+      /*
+       * خطای برنامه‌ها نباید باعث شود
+       * کل جدول پیش‌بینی‌ها نمایش داده نشود.
+       */
+      setProgramNames({});
+    }
+  }, []);
+
+
+useEffect(() => {
+  void loadPrograms();
+}, [loadPrograms]);
 
 
   return (
@@ -355,7 +439,7 @@ export default function ForecastListPage() {
             <table
               className="
                 w-full
-                min-w-[1100px]
+                min-w-[1000px]
                 border-collapse
               "
             >
@@ -370,7 +454,7 @@ export default function ForecastListPage() {
                   </th>
 
                   <th className={headerClass}>
-                    شناسه برنامه
+                    نام برنامه
                   </th>
 
                   <th className={headerClass}>
@@ -476,9 +560,18 @@ export default function ForecastListPage() {
                             1}
                         </td>
 
-                        <td className={cellClass}>
-                          {forecast.planId}
-                        </td>
+                       <td
+                            className={`
+                              ${cellClass}
+                              font-medium
+                              text-gray-800
+                            `}
+                          >
+                            {programNames[
+                              Number(forecast.planId)
+                            ] ??
+                              `برنامه شماره ${forecast.planId}`}
+                          </td>
 
                         <td className={cellClass}>
                           {forecast.episodeNumber}
@@ -786,3 +879,134 @@ const paginationButtonClass = `
   disabled:cursor-not-allowed
   disabled:opacity-50
 `;
+
+
+
+interface ProgramListItem {
+  id: number;
+  name: string;
+}
+
+
+function extractPrograms(
+  value: unknown
+): ProgramListItem[] {
+  const rawPrograms =
+    findProgramsArray(value);
+
+  if (!rawPrograms) {
+    console.error(
+      "Programs array was not found:",
+      value
+    );
+
+    return [];
+  }
+
+  return rawPrograms
+    .map(normalizeProgram)
+    .filter(
+      (
+        program
+      ): program is ProgramListItem =>
+        program !== null
+    );
+}
+
+
+function findProgramsArray(
+  value: unknown
+): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const possibleFields = [
+    "programs",
+    "Programs",
+    "items",
+    "Items",
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ];
+
+  for (
+    const fieldName of
+    possibleFields
+  ) {
+    const fieldValue =
+      value[fieldName];
+
+    if (Array.isArray(fieldValue)) {
+      return fieldValue;
+    }
+
+    const nestedResult =
+      findProgramsArray(
+        fieldValue
+      );
+
+    if (nestedResult) {
+      return nestedResult;
+    }
+  }
+
+  return null;
+}
+
+
+function normalizeProgram(
+  value: unknown
+): ProgramListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawId =
+    value.id ??
+    value.Id ??
+    value.value ??
+    value.Value ??
+    value.planId ??
+    value.PlanId;
+
+  const rawName =
+    value.name ??
+    value.Name ??
+    value.text ??
+    value.Text ??
+    value.title ??
+    value.Title ??
+    value.planName ??
+    value.PlanName;
+
+  const id =
+    typeof rawId === "number"
+      ? rawId
+      : typeof rawId === "string"
+        ? Number(rawId)
+        : Number.NaN;
+
+  const name =
+    typeof rawName === "string"
+      ? rawName.trim()
+      : "";
+
+  if (
+    !Number.isFinite(id) ||
+    !name
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+  };
+}

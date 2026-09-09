@@ -178,22 +178,43 @@ export default function ForecastReviewDetailsPage() {
   );
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="mt-6 rounded-xl border bg-white p-5 shadow-sm"><h2 className="mb-5 border-b pb-3 text-lg font-bold">{title}</h2>{children}</section>;
+function Card({ title, children }:
+   { title: string; children: ReactNode }) {
+  return <section 
+  className="mt-6 rounded-xl border bg-white p-5 shadow-sm">
+    <h2 className="mb-5 border-b pb-3 text-lg font-bold">
+      {title}</h2>
+      {children}
+      </section>;
 }
 
-function Info({ label, value, icon }: { label: string; value: string | number | null | undefined; icon?: ReactNode }) {
-  return <div><div className="mb-2 flex items-center gap-2 text-sm text-gray-500">{icon}{label}</div><p className="min-h-11 rounded-lg bg-gray-50 p-3 font-semibold">{value === null || value === undefined || value === "" ? "—" : value}</p></div>;
+function Info({ label, value, icon }:
+   { label: string; value: string | number | null | undefined;
+     icon?: ReactNode }) {
+  return <div><div className="mb-2 flex items-center gap-2 text-sm text-gray-500">
+    {icon}{label}</div>
+    <p className="min-h-11 rounded-lg bg-gray-50 p-3 font-semibold">
+      {value === null || value === undefined || value === "" ?
+       "—" : value}
+       </p>
+       </div>;
 }
 
-function extractForecast(value: unknown): Row | null {
+function extractForecast(value: unknown):
+ Row | null {
   if (!record(value)) return null;
-  const candidates: unknown[] = [value, value.forecast, value.data, value.result];
-  if (record(value.data)) candidates.push(value.data.forecast, value.data.data, value.data.result);
+  const candidates: unknown[] =
+   [value, value.forecast, value.data, value.result];
+  if (record(value.data))
+     candidates.push(
+      value.data.forecast, 
+      value.data.data,
+      value.data.result);
   return candidates.find((item): item is Row => record(item) && typeof item.id === "string") ?? null;
 }
 
-function normalizeForecast(v: Row, fallbackId: string): ViewForecast {
+function normalizeForecast(v: Row, fallbackId: string):
+ ViewForecast {
   return {
     id: str(v.id) || fallbackId,
     planId: num(v.planId), planName: str(v.planName) || str(v.programName),
@@ -207,29 +228,57 @@ function normalizeForecast(v: Row, fallbackId: string): ViewForecast {
 function axes(value: unknown): ViewForecast["topicAxes"] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item, index) => {
-    if (typeof item === "string") return item.trim() ? [{ id: `axis-${index}`, title: item.trim(), displayOrder: index + 1 }] : [];
+    if (typeof item === "string") return item.trim() ?
+     [{ id: `axis-${index}`, 
+      title: item.trim(), 
+      displayOrder: index + 1 }] : 
+      [];
     if (!record(item)) return [];
     const title = str(item.title) || str(item.name);
-    return title ? [{ id: str(item.id) || `axis-${index}`, title, displayOrder: num(item.displayOrder) ?? index + 1 }] : [];
+    return title ?
+     [{ id: str(item.id) || `axis-${index}`,
+       title,
+       displayOrder: num(item.displayOrder) ?? index + 1 }] :
+       [];
   });
 }
 
 function experts(v: Row): ViewForecast["experts"] {
   if (Array.isArray(v.experts)) {
-    const rows = v.experts.flatMap((item, index) => record(item) ? [{ id: str(item.id) || `expert-${index}`, name: str(item.name) || str(item.fullName) || `${str(item.firstName)} ${str(item.lastName)}`.trim() }] : []);
+    const rows = v.experts.flatMap((item, index) => 
+      record(item) ? 
+    [{ id: str(item.id) || `expert-${index}`, 
+      name: str(item.name) || str(item.fullName) || 
+      `${str(item.firstName)} ${str(item.lastName)}`.trim() }] :
+       []);
     if (rows.length) return rows;
   }
-  return Array.isArray(v.expertIds) ? v.expertIds.flatMap((id, index) => typeof id === "string" ? [{ id, name: `کارشناس ${fa(index + 1)}` }] : []) : [];
+  return Array.isArray(v.expertIds) ?
+   v.expertIds.flatMap((id, index) =>
+     typeof id === "string" ?
+    [{ id, name: `کارشناس ${fa(index + 1)}` }] : []) : [];
 }
 
-function isPending(s: unknown) { return s === 2 || s === "2" || s === "PendingReview"; }
-function statusTitle(s: unknown) { const x = String(s ?? ""); return ({ "1": "پیش‌نویس", Draft: "پیش‌نویس", "3": "تأییدشده", Approved: "تأییدشده", "4": "ردشده", Rejected: "ردشده", "5": "بازگشت برای اصلاح", ReturnedForEdit: "بازگشت برای اصلاح" } as Record<string, string>)[x] ?? x ?? "نامشخص"; }
-function jalali(value: string) { if (!value) return "—"; const date = new Date(normalizeDigits(value)); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" }).format(date); }
-function fa(value: string | number) { return String(value).replace(/\d/g, digit => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]); }
-function normalizeDigits(value: string) { return value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))); }
-function parseJson(text: string): unknown | null { try { return text.trim() ? JSON.parse(text) as unknown : null; } catch { return null; } }
-function errorMessage(value: unknown) { if (!record(value)) return null; return str(value.message) || str(value.description) || str(value.detail) || (record(value.details) ? str(value.details.detail) || str(value.details.message) : "") || null; }
-function str(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
-function num(value: unknown): number | null { const result = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(normalizeDigits(value)) : NaN; return Number.isFinite(result) ? result : null; }
-function bool(value: unknown) { return value === true || value === "true" || value === 1 || value === "1"; }
-function record(value: unknown): value is Row { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function isPending(s: unknown) 
+{ return s === 2 || s === "2" || s === "PendingReview"; }
+function statusTitle(s: unknown) { const x = String(s ?? ""); 
+  return ({ "1": "پیش‌نویس", Draft: "پیش‌نویس", "3": "تأییدشده", Approved: "تأییدشده", "4": "ردشده", Rejected: "ردشده", "5": "بازگشت برای اصلاح", ReturnedForEdit: "بازگشت برای اصلاح" } as Record<string, string>)[x] ?? x ?? "نامشخص"; }
+function jalali(value: string) { if (!value) 
+  return "—"; const date = new Date(normalizeDigits(value)); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" }).format(date); }
+function fa(value: string | number) { 
+  return String(value).replace(/\d/g, digit => "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]); }
+function normalizeDigits(value: string) { 
+  return value.replace(/[۰-۹]/g, d => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d))).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))); }
+function parseJson(text: string): unknown | null { try 
+  { return text.trim() ? JSON.parse(text) as unknown : null; } catch { return null; } }
+function errorMessage(value: unknown) { if (!record(value)) 
+  return null; return str(value.message) || str(value.description) || str(value.detail) || (record(value.details) ? str(value.details.detail) || str(value.details.message) : "") || null; }
+function str(value: unknown) { 
+  return typeof value === "string" ? value.trim() : ""; }
+function num(value: unknown): number | null 
+{ const result = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(normalizeDigits(value)) : NaN; return Number.isFinite(result) ? result : null; }
+function bool(value: unknown) { 
+  return value === true || value === "true" || value === 1 || value === "1"; }
+function record(value: unknown): value is Row { 
+  return typeof value === "object" && value !== null && 
+  !Array.isArray(value); }

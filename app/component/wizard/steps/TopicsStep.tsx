@@ -189,7 +189,7 @@ export default function TopicsStep({
      * new add
      */
     const newTopic: Topic = {
-      id: crypto.randomUUID(),
+      id:createClientId(),
 
       title: normalizedTitle,
 
@@ -934,3 +934,33 @@ const tableCellClass = `
   text-gray-600
   whitespace-nowrap
 `;
+
+
+
+/*
+ * ساخت شناسه موقت سمت Frontend
+ *
+ * randomUUID در localhost و HTTPS فعال است،
+ * اما ممکن است روی IP شبکه با HTTP فعال نباشد.
+ */
+function createClientId():
+  string {
+  if (
+    typeof globalThis.crypto !==
+      "undefined" &&
+    typeof globalThis.crypto
+      .randomUUID ===
+      "function"
+  ) {
+    return globalThis.crypto
+      .randomUUID();
+  }
+
+
+  return (
+    `topic-${Date.now()}-` +
+    Math.random()
+      .toString(36)
+      .slice(2, 11)
+  );
+}

@@ -860,12 +860,7 @@ async function loadSelectedExperts(
 }
 
 
-/*
- * تبدیل پاسخ Forecast به مدل ویرایش
- *
- * اعتبارسنجی فقط روی فیلدهای ضروری
- * عملیات ویرایش انجام می‌شود.
- */
+
 function parseEditableForecast(
   value: unknown,
   fallbackId: string
@@ -918,9 +913,7 @@ function parseEditableForecast(
       source.status
     );
 
-  /*
-   * فقط فیلدهای واقعاً ضروری
-   */
+    //فیلدهای اصلی
   if (
     !id ||
     planId === null ||
@@ -1141,10 +1134,7 @@ function parseExpertOption(
 }
 
 
-/*
- * پیدا کردن Object اصلی داخل پاسخ‌های
- * مستقیم یا چندلایه
- */
+
 function findNestedObject(
   value: unknown,
   wrapperNames: string[],

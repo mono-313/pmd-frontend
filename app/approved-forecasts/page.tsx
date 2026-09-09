@@ -47,13 +47,20 @@ import gregorianEn from
   "react-date-object/locales/gregorian_en";
 
 
-  import IssueProgramProfileDialog from
+import IssueProgramProfileDialog from
   "@/app/component/program-profiles/IssueProgramProfileDialog";
 
 interface ApprovedForecastListResponse {
   items: ForecastResponse[];
 
   pagination: PaginationMetadata;
+}
+
+
+interface IssuedProfileReference {
+  id: string;
+
+  forecastId: string;
 }
 
 
@@ -85,13 +92,6 @@ export default function ApprovedForecastsPage() {
     fromDate,
     setFromDate,
   ] = useState<DateObject | null>(
-    null
-  );
-
-  const [
-  selectedForecast,
-  setSelectedForecast,
-  ] = useState<ForecastResponse | null>(
     null
   );
 
@@ -133,6 +133,13 @@ export default function ApprovedForecastsPage() {
     error,
     setError,
   ] = useState("");
+
+  const [
+    issuedProfiles,
+    setIssuedProfiles,
+  ] = useState<Record<string, string>>(
+    {}
+  );
 
 /*
  * Forecast انتخاب‌شده برای
@@ -266,6 +273,67 @@ setForecasts(
     ForecastResponse[]
 );
 
+
+/*
+ * دریافت شناسنامه‌های صادرشده برای تشخیص اینکه
+ * هر Forecast قبلاً به شناسنامه تبدیل شده یا خیر.
+ */
+const profilesResponse =
+  await fetch(
+    "/api/program-profiles?pageNumber=1&pageSize=1000",
+    {
+      method: "GET",
+
+      headers: {
+        Accept:
+          "application/json",
+      },
+
+      cache:
+        "no-store",
+    }
+  );
+
+
+const profilesText =
+  await profilesResponse.text();
+
+const profilesData =
+  parseJsonResponse(
+    profilesText
+  );
+
+
+if (!profilesResponse.ok) {
+  throw new Error(
+    getErrorMessage(
+      profilesData
+    ) ??
+    (
+      "دریافت وضعیت شناسنامه‌ها انجام نشد. " +
+      `کد پاسخ: ${profilesResponse.status}`
+    )
+  );
+}
+
+
+const issuedReferences =
+  extractIssuedProfileReferences(
+    profilesData
+  );
+
+
+setIssuedProfiles(
+  Object.fromEntries(
+    issuedReferences.map(
+      (profile) => [
+        profile.forecastId,
+        profile.id,
+      ]
+    )
+  )
+);
+
 if (
   isRecord(
     responseData.pagination
@@ -282,6 +350,7 @@ if (
         } catch (loadError) {
           setForecasts([]);
           setPagination(null);
+          setIssuedProfiles({});
 
           setError(
             loadError instanceof Error
@@ -296,6 +365,7 @@ if (
         appliedFromDate,
         appliedToDate,
         currentPage,
+        refreshKey,
       ]
     );
 
@@ -394,27 +464,6 @@ function handleResetFilters() {
 }
 
 
-function handleIssueProfile(
-  forecast: ForecastResponse
-) {
-  setOpenMenuId(null);
-
-  setSelectedForecast(
-    forecast
-  );
-}
-
- //open-modal
-function handleOpenIssueDialog(
-  forecastId: string
-) {
-  setIssueSuccessMessage("");
-
-  setSelectedForecastId(
-    forecastId
-  );
-}
-
 //close-modal
 function handleCloseIssueDialog() {
   setSelectedForecastId(
@@ -424,8 +473,11 @@ function handleCloseIssueDialog() {
 
 //صدور موفق شناسنامه
 function handleProfileIssued(
-  _profileId: string
+  profileId: string
 ) {
+  const issuedForecastId =
+    selectedForecastId;
+
   /*
    * بستن Modal
    */
@@ -439,6 +491,17 @@ function handleProfileIssued(
   setIssueSuccessMessage(
     "شناسنامه با موفقیت صادر شد."
   );
+
+  if (issuedForecastId) {
+    setIssuedProfiles(
+      (previous) => ({
+        ...previous,
+
+        [issuedForecastId]:
+          profileId,
+      })
+    );
+  }
 
   /*
    * دریافت مجدد موضوعات از Backend
@@ -891,17 +954,26 @@ function handleProfileIssued(
 
                         <td className={cellClass}>
                           <span
-                            className="
+                            className={`
                               inline-flex
                               rounded-full
-                              bg-green-100
                               px-3 py-1
                               text-xs
                               font-bold
-                              text-green-700
-                            "
+                              ${
+                                issuedProfiles[
+                                  forecast.id
+                                ]
+                                  ? "bg-blue-100 text-[#007fcf]"
+                                  : "bg-green-100 text-green-700"
+                              }
+                            `}
                           >
-                            تأییدشده
+                            {issuedProfiles[
+                              forecast.id
+                            ]
+                              ? "شناسنامه صادرشده"
+                              : "تأییدشده - آماده صدور"}
                           </span>
                         </td>
 
@@ -975,19 +1047,54 @@ function handleProfileIssued(
                                   shadow-xl
                                 "
                               >
-                               <button
-  type="button"
-  onClick={() => {
-    setSelectedForecastId(
-      forecast.id
-    );
+                                {issuedProfiles[
+                                  forecast.id
+                                ] ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const profileId =
+                                        issuedProfiles[
+                                          forecast.id
+                                        ];
 
-    /*
-     * اگر برای منوی سه‌نقطه State داری
-     */
-    setOpenMenuId(null);
-  }}
-  className="
+                                      setOpenMenuId(null);
+
+                                      router.push(
+                                        `/program-profiles/${encodeURIComponent(
+                                          profileId
+                                        )}`
+                                      );
+                                    }}
+                                    className="
+                                      flex
+                                      w-full
+                                      items-center
+                                      gap-3
+                                      rounded-lg
+                                      px-3 py-3
+                                      text-sm
+                                      font-semibold
+                                      text-[#007fcf]
+                                      transition
+                                      hover:bg-blue-50
+                                    "
+                                  >
+                                    مشاهده شناسنامه
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIssueSuccessMessage("");
+
+                                      setSelectedForecastId(
+                                        forecast.id
+                                      );
+
+                                      setOpenMenuId(null);
+                                    }}
+                                    className="
                                     flex
                                     w-full
                                     items-center
@@ -1001,9 +1108,10 @@ function handleProfileIssued(
                                     hover:bg-blue-50
                                     hover:text-[#007fcf]
                                   "
->
-  تبدیل به شناسنامه
-</button>
+                                  >
+                                    تبدیل به شناسنامه
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1136,6 +1244,130 @@ function handleProfileIssued(
 }
 
 
+
+
+/*
+ * استخراج شناسه شناسنامه و Forecast متناظر از پاسخ
+ * مستقیم، items یا Wrapperهای data/Data.
+ */
+function extractIssuedProfileReferences(
+  value: unknown
+): IssuedProfileReference[] {
+  const result:
+    IssuedProfileReference[] = [];
+
+  const visited =
+    new Set<unknown>();
+
+
+  function visit(
+    currentValue: unknown
+  ) {
+    if (
+      currentValue === null ||
+      typeof currentValue !==
+        "object" ||
+      visited.has(
+        currentValue
+      )
+    ) {
+      return;
+    }
+
+
+    visited.add(
+      currentValue
+    );
+
+
+    if (Array.isArray(currentValue)) {
+      currentValue.forEach(
+        visit
+      );
+
+      return;
+    }
+
+
+    const record =
+      currentValue as Record<
+        string,
+        unknown
+      >;
+
+    const id =
+      readFirstString(
+        record,
+        [
+          "id",
+          "Id",
+          "profileId",
+          "ProfileId",
+        ]
+      );
+
+    const forecastId =
+      readFirstString(
+        record,
+        [
+          "forecastId",
+          "ForecastId",
+        ]
+      );
+
+
+    if (
+      id &&
+      forecastId &&
+      !result.some(
+        (item) =>
+          item.forecastId ===
+          forecastId
+      )
+    ) {
+      result.push({
+        id,
+
+        forecastId,
+      });
+    }
+
+
+    Object.values(record)
+      .forEach(
+        visit
+      );
+  }
+
+
+  visit(value);
+
+  return result;
+}
+
+
+function readFirstString(
+  value: Record<
+    string,
+    unknown
+  >,
+  fields: string[]
+): string {
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+    if (
+      typeof fieldValue ===
+        "string" &&
+      fieldValue.trim()
+    ) {
+      return fieldValue.trim();
+    }
+  }
+
+  return "";
+}
 
 
 function isApprovedForecastListResponse(

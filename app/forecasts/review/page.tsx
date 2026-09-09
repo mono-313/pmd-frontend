@@ -477,7 +477,6 @@ function isPendingReviewStatus(
 
 
 /*
- * تبدیل تاریخ ISO میلادی Backend
  * به تاریخ شمسی قابل نمایش
  */
 function formatJalaliDate(
@@ -516,10 +515,6 @@ function formatJalaliDate(
       day:
         "2-digit",
 
-      /*
-       * مانع جابه‌جایی روز بر اثر
-       * اختلاف منطقه زمانی می‌شود.
-       */
       timeZone:
         "UTC",
     }

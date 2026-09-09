@@ -10,12 +10,6 @@ const BASE_INFO_API_URL =
 
 
 /*
- * GET /api/base-info/personnel
- *
- * نمونه:
- * /api/base-info/personnel?networkId=210
- *
- * یا:
  * /api/base-info/personnel?networkId=210&jobId=1
  */
 export async function GET(
@@ -238,10 +232,6 @@ export async function GET(
     }
 
 
-    /*
-     * تبدیل پاسخ سرویس اطلاعات پایه
-     * به ساختار یکپارچه Frontend
-     */
     const personnel =
       rawItems
         .map(
@@ -287,19 +277,6 @@ export async function GET(
 }
 
 
-/*
- * تبدیل پاسخ‌های مختلف سرویس
- * به { id, name }
- *
- * سرویس ممکن است از این نام‌ها
- * استفاده کند:
- *
- * Value / Text
- * value / text
- * Id / Name
- * id / name
- * PersonnelId / PersonnelName
- */
 function normalizePersonnelOption(
   value: unknown
 ): {

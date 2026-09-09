@@ -36,15 +36,20 @@ export default function ForecastActions({
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [openMenu, setOpenMenu] = useState(false);
-  const [menuPosition, setMenuPosition] = useState<MenuPosition>({
+  const [menuPosition, setMenuPosition] = 
+  useState<MenuPosition>({
     top: 0,
     left: 0,
   });
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [pendingAction, setPendingAction] = 
+  useState<PendingAction>(null);
+  const [isLoading, setIsLoading] = 
+  useState(false);
+  const [error, setError] = 
+  useState("");
 
-  const permissions = getForecastRowPermissions(forecast.status);
+  const permissions = 
+  getForecastRowPermissions(forecast.status);
 
   useEffect(() => {
     if (!openMenu) return;
@@ -88,7 +93,8 @@ export default function ForecastActions({
     setOpenMenu((previous) => !previous);
   }
 
-  function openConfirmation(action: Exclude<PendingAction, null>) {
+  function openConfirmation
+  (action: Exclude<PendingAction, null>) {
     setOpenMenu(false);
     setError("");
     setPendingAction(action);
@@ -106,7 +112,8 @@ export default function ForecastActions({
           ? `/api/forecasts/${forecast.id}`
           : `/api/forecasts/${forecast.id}/submit`;
 
-      const method = pendingAction === "delete" ? "DELETE" : "POST";
+      const method = pendingAction === "delete" ? 
+      "DELETE" : "POST";
 
       const response = await fetch(endpoint, {
         method,
@@ -115,7 +122,8 @@ export default function ForecastActions({
         },
       });
 
-      const responseData = parseJsonResponse(await response.text());
+      const responseData = parseJsonResponse
+      (await response.text());
 
       if (!response.ok) {
         throw new Error(
@@ -155,7 +163,16 @@ export default function ForecastActions({
       {openMenu && (
         <div
           ref={menuRef}
-          className="fixed z-[90] w-48 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-xl"
+          className="fixed 
+                      z-[90] 
+                      w-48 
+                      overflow-hidden 
+                      rounded-xl
+                      border 
+                      border-gray-200 
+                      bg-white 
+                      py-1 
+                      shadow-xl"
           style={{
             top: menuPosition.top,
             left: menuPosition.left,
@@ -171,10 +188,14 @@ export default function ForecastActions({
                 )
               }
               className="
-                flex w-full
-                items-center gap-3
-                px-4 py-2.5
-                text-right text-sm
+                flex 
+                w-full
+                items-center 
+                gap-3
+                px-4 
+                py-2.5
+                text-right 
+                text-sm
                 text-gray-700
                 hover:bg-gray-50
               "
@@ -252,14 +273,23 @@ function parseJsonResponse(text: string): unknown | null {
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isRecord(value: unknown): 
+value is Record<string, unknown> {
+
+  return typeof 
+  value === "object" && 
+  value !== null && !Array.isArray(value);
 }
 
-function getMessage(value: unknown): string | null {
-  if (!isRecord(value)) return null;
+function getMessage(value: unknown):
+ string | null {
+  if (!isRecord(value)) 
+    return null;
 
-  if (typeof value.message === "string") return value.message;
-  if (typeof value.description === "string") return value.description;
+  if (typeof value.message === "string") 
+    return value.message;
+  
+  if (typeof value.description === "string") 
+    return value.description;
   return null;
 }

@@ -13,12 +13,10 @@ const BASE_INFO_API_URL =
   "http://172.16.60.34/api/v1/baseinfo";
 
 
-/*
- * GET /api/base-info/activity-types?jobId=1
- *
- * آدرس Backend:
- * GET /activityTypes/{jobId}
- */
+
+//   آدرس Backend:
+//  GET /activityTypes/{jobId}
+ 
 export async function GET(
   request: Request
 ) {
@@ -75,12 +73,7 @@ export async function GET(
     }
 
 
-    /*
-     * ساخت URL نهایی Backend
-     *
-     * نمونه:
-     * http://172.16.60.34/api/v1/baseinfo/activityTypes/1
-     */
+   
     const backendUrl =
       `${removeTrailingSlash(
         BASE_INFO_API_URL
@@ -109,10 +102,6 @@ export async function GET(
       );
 
 
-    /*
-     * دریافت پاسخ به‌صورت Text
-     * برای پشتیبانی از پاسخ خالی یا غیر JSON
-     */
     const responseText =
       await backendResponse.text();
 
@@ -244,14 +233,6 @@ export async function GET(
     }
 
 
-    /*
-     * تبدیل پاسخ Backend به ساختار ثابت Frontend:
-     *
-     * {
-     *   id: number,
-     *   name: string
-     * }
-     */
     const activityTypes =
       rawItems
         .map(
@@ -315,10 +296,6 @@ export async function GET(
 }
 
 
-/*
- * تبدیل ساختار هر Activity Type
- * به مدل مورد استفاده Frontend
- */
 function normalizeActivityOption(
   value: unknown
 ): {
@@ -380,15 +357,7 @@ function normalizeActivityOption(
 }
 
 
-/*
- * پاسخ ممکن است:
- *
- * 1. مستقیماً آرایه باشد.
- * 2. داخل items باشد.
- * 3. داخل data باشد.
- * 4. داخل result باشد.
- * 5. به‌صورت تو در تو برگردد.
- */
+
 function extractArray(
   value: unknown
 ): unknown[] | null {
@@ -657,10 +626,7 @@ function removeTrailingSlash(
 }
 
 
-/*
- * تبدیل اعداد فارسی و عربی
- * به اعداد انگلیسی
- */
+/*number-normalize*/
 function normalizeDigits(
   value: string
 ): string {

@@ -219,7 +219,6 @@ export default function ForecastViewPage() {
 
         /*
          * دریافت نام برنامه و اطلاعات کارشناسان
-         * به‌صورت هم‌زمان
          */
         const [
           loadedProgramName,
@@ -1104,10 +1103,6 @@ function parseForecastDetails(
     hasExpert:
       source.hasExpert === true,
 
-    /*
-     * Backend برخلاف مستند وضعیت را
-     * به شکل عددی نیز برمی‌گرداند.
-     */
     status:
       normalizeForecastStatus(
         source.status
