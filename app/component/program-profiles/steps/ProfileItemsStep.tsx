@@ -317,7 +317,7 @@ export default function ProfileItemsStep({
                     font-bold
                   "
                 >
-                  نوع تولید
+                 موضوع
                 </th>
 
                 <th
@@ -394,8 +394,7 @@ export default function ProfileItemsStep({
                       "
                     >
                       {
-                        item.productionType ||
-                        "—"
+                        item.itemSubject
                       }
                     </td>
 

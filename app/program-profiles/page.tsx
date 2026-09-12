@@ -70,6 +70,17 @@ export default function ProgramProfilesPage() {
     ProgramProfileResponse[]
   >([]);
 
+  /*
+   * نگاشت شناسه برنامه به نام برنامه.
+   * نمونه: { 69432: "نام برنامه" }
+   */
+  const [
+    programNames,
+    setProgramNames,
+  ] = useState<Record<number, string>>(
+    {}
+  );
+
   const [
   pagination,
   setPagination,
@@ -263,9 +274,86 @@ export default function ProgramProfilesPage() {
     );
 
 
+  /*
+   * دریافت برنامه‌های قابل دسترس کاربر و ساخت
+   * نگاشت planId به نام برنامه.
+   * خطای این درخواست نباید مانع نمایش شناسنامه‌ها شود.
+   */
+  const loadPrograms =
+    useCallback(async () => {
+      try {
+        const response =
+          await fetch(
+            "/api/programs",
+            {
+              method: "GET",
+
+              headers: {
+                Accept:
+                  "application/json",
+              },
+
+              cache:
+                "no-store",
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        const responseData =
+          parseJsonResponse(
+            responseText
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            getErrorMessage(
+              responseData
+            ) ??
+              `دریافت برنامه‌ها انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        const programs =
+          extractPrograms(
+            responseData
+          );
+
+        const nextProgramNames:
+          Record<number, string> = {};
+
+        for (
+          const program of
+          programs
+        ) {
+          nextProgramNames[
+            program.id
+          ] = program.name;
+        }
+
+        setProgramNames(
+          nextProgramNames
+        );
+      } catch (loadError) {
+        console.error(
+          "Load programs error:",
+          loadError
+        );
+
+        setProgramNames({});
+      }
+    }, []);
+
+
   useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
+
+
+  useEffect(() => {
+    void loadPrograms();
+  }, [loadPrograms]);
 
 
   /*
@@ -452,7 +540,7 @@ export default function ProgramProfilesPage() {
         min-h-screen
         min-w-0
         w-full
-        max-w-full
+        
         overflow-x-hidden
         bg-gray-50
         px-4 py-8
@@ -464,7 +552,7 @@ export default function ProgramProfilesPage() {
           mx-auto
           min-w-0
           w-full
-          max-w-full
+          
           max-w-7xl
         "
       >
@@ -718,7 +806,6 @@ export default function ProgramProfilesPage() {
           className="
             min-w-0
             w-full
-            max-w-full
             overflow-hidden
             rounded-2xl
             border
@@ -763,8 +850,8 @@ export default function ProgramProfilesPage() {
               className="
                 block
                 min-w-0
-                w-full
-                max-w-full
+                w-m-full
+                
                 overflow-x-auto
                 overscroll-x-contain
               "
@@ -772,10 +859,24 @@ export default function ProgramProfilesPage() {
               <table
                 className="
                   w-full
-                  min-w-[1000px]
+                  table-fixed
                   border-collapse
                 "
               >
+                <colgroup>
+                    <col className="w-[4%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[6%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                  </colgroup>
                 <thead>
                   <tr
                     className="
@@ -790,7 +891,7 @@ export default function ProgramProfilesPage() {
                     </th>
 
                     <th className={headerClass}>
-                      شناسه برنامه
+                      نام برنامه
                     </th>
 
                     <th className={headerClass}>
@@ -829,9 +930,9 @@ export default function ProgramProfilesPage() {
                       ساختار
                     </th>
 
-                    <th className={headerClass}>
+                    {/* <th className={headerClass}>
                       ثبت‌کننده
-                    </th>
+                    </th> */}
 
                     <th className={headerClass}>
                       عملیات
@@ -865,8 +966,34 @@ export default function ProgramProfilesPage() {
                             1}
                         </td>
 
-                        <td className={cellClass}>
-                          {profile.planId}
+                        <td
+                          className="
+                            px-3 py-4
+                            align-middle
+                            text-sm
+                            text-gray-700
+                          "
+                        >
+                          <span
+                            className="
+                              block
+                              overflow-hidden
+                              text-ellipsis
+                              break-words
+                              whitespace-normal
+                              leading-6
+                              line-clamp-2
+                            "
+                            title={getProgramName(
+                              programNames,
+                              profile.planId
+                            )}
+                          >
+                            {getProgramName(
+                              programNames,
+                              profile.planId
+                            )}
+                          </span>
                         </td>
 
                         <td
@@ -920,10 +1047,10 @@ export default function ProgramProfilesPage() {
                           {profile.programStructureName}
                         </td>
 
-                        <td className={cellClass}>
+                        {/* <td className={cellClass}>
                           {profile.createdByUserName ||
                             "—"}
-                        </td>
+                        </td> */}
 
                         <td
                           className={cellClass}
@@ -1395,6 +1522,181 @@ function normalizeListResponse(
         requestedPage
       ),
   };
+}
+
+
+interface ProgramListItem {
+  id: number;
+  name: string;
+}
+
+
+/*
+ * استخراج برنامه‌ها از ساختارهای متداول پاسخ Route.
+ */
+function extractPrograms(
+  value: unknown
+): ProgramListItem[] {
+  const rawPrograms =
+    findProgramsArray(value);
+
+  if (!rawPrograms) {
+    console.error(
+      "Programs array was not found:",
+      value
+    );
+
+    return [];
+  }
+
+  return rawPrograms
+    .map(normalizeProgram)
+    .filter(
+      (
+        program
+      ): program is ProgramListItem =>
+        program !== null
+    );
+}
+
+
+function findProgramsArray(
+  value: unknown
+): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const possibleFields = [
+    "programs",
+    "Programs",
+    "items",
+    "Items",
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ];
+
+  for (
+    const fieldName of
+    possibleFields
+  ) {
+    const fieldValue =
+      value[fieldName];
+
+    if (Array.isArray(fieldValue)) {
+      return fieldValue;
+    }
+
+    if (isRecord(fieldValue)) {
+      const nestedArray =
+        findProgramsArray(
+          fieldValue
+        );
+
+      if (nestedArray) {
+        return nestedArray;
+      }
+    }
+  }
+
+  return null;
+}
+
+
+function normalizeProgram(
+  value: unknown
+): ProgramListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawId =
+    value.id ??
+    value.Id ??
+    value.value ??
+    value.Value ??
+    value.planId ??
+    value.PlanId;
+
+  const rawName =
+    value.name ??
+    value.Name ??
+    value.text ??
+    value.Text ??
+    value.title ??
+    value.Title ??
+    value.planName ??
+    value.PlanName;
+
+  const id =
+    readNumericValue(rawId);
+
+  const name =
+    typeof rawName === "string"
+      ? rawName.trim()
+      : "";
+
+  if (
+    id === null ||
+    !name
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+  };
+}
+
+
+function getProgramName(
+  programNames:
+    Record<number, string>,
+  planId: unknown
+): string {
+  const normalizedPlanId =
+    readNumericValue(planId);
+
+  if (normalizedPlanId === null) {
+    return "—";
+  }
+
+  return (
+    programNames[
+      normalizedPlanId
+    ] ??
+    `برنامه شماره ${normalizedPlanId}`
+  );
+}
+
+
+function readNumericValue(
+  value: unknown
+): number | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" &&
+          value.trim()
+        ? Number(
+            normalizeDigits(
+              value
+            )
+          )
+        : Number.NaN;
+
+  return Number.isFinite(
+    numericValue
+  )
+    ? numericValue
+    : null;
 }
 
 

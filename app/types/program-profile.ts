@@ -188,16 +188,21 @@ export interface ProfileCrewMemberData {
  * GET /planItems/{planId}
  */
 export interface ProfileItemData {
+  itemId:
+    number | null;
+
   itemName:
     string;
+  
+  itemSubject:
+    string;
+
+  productionTypeId:
+    number | null;
 
   productionType:
     string;
 
-  /*
-   * فرمت مورد انتظار:
-   * hh:mm:ss
-   */
   duration:
     string;
 }

@@ -439,10 +439,21 @@ useEffect(() => {
             <table
               className="
                 w-full
-                min-w-[1000px]
-                border-collapse
+                  table-fixed
+                  border-collapse
               "
             >
+              <colgroup>
+                    <col className="w-[4%]" />
+                    <col className="w-[20%]" />
+                    <col className="w-[4%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    </colgroup>
               <thead
                 className="
                   bg-gray-50
@@ -477,9 +488,9 @@ useEffect(() => {
                     محورهای موضوعی
                   </th>
 
-                  <th className={headerClass}>
+                  {/* <th className={headerClass}>
                     ثبت‌کننده
-                  </th>
+                  </th> */}
 
                   <th className={headerClass}>
                     وضعیت
@@ -561,17 +572,34 @@ useEffect(() => {
                         </td>
 
                        <td
-                            className={`
-                              ${cellClass}
-                              font-medium
-                              text-gray-800
-                            `}
+                          className="
+                            px-3 py-4
+                            align-middle
+                            text-sm
+                            text-gray-700
+                          "
+                        >
+                          <span
+                            className="
+                              block
+                              overflow-hidden
+                              text-ellipsis
+                              break-words
+                              whitespace-normal
+                              leading-6
+                              line-clamp-2
+                            "
+                            title={getProgramName(
+                              programNames,
+                              forecast.planId
+                            )}
                           >
-                            {programNames[
-                              Number(forecast.planId)
-                            ] ??
-                              `برنامه شماره ${forecast.planId}`}
-                          </td>
+                            {getProgramName(
+                              programNames,
+                              forecast.planId
+                            )}
+                          </span>
+                        </td>
 
                         <td className={cellClass}>
                           {forecast.episodeNumber}
@@ -622,9 +650,9 @@ useEffect(() => {
                             : "—"}
                         </td>
 
-                        <td className={cellClass}>
+                        {/* <td className={cellClass}>
                           {forecast.createdByUserName}
-                        </td>
+                        </td> */}
 
                         <td className={cellClass}>
                           <ForecastStatusBadge
@@ -1009,4 +1037,79 @@ function normalizeProgram(
     id,
     name,
   };
+}
+
+
+function getProgramName(
+  programNames:
+    Record<number, string>,
+  planId: unknown
+): string {
+  const normalizedPlanId =
+    readNumericValue(planId);
+
+  if (normalizedPlanId === null) {
+    return "—";
+  }
+
+  return (
+    programNames[
+      normalizedPlanId
+    ] ??
+    `برنامه شماره ${normalizedPlanId}`
+  );
+}
+
+
+
+function readNumericValue(
+  value: unknown
+): number | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" &&
+          value.trim()
+        ? Number(
+            normalizeDigits(
+              value
+            )
+          )
+        : Number.NaN;
+
+  return Number.isFinite(
+    numericValue
+  )
+    ? numericValue
+    : null;
+}
+
+function normalizeDigits(
+  value: string
+): string {
+  const persianDigits =
+    "۰۱۲۳۴۵۶۷۸۹";
+
+  const arabicDigits =
+    "٠١٢٣٤٥٦٧٨٩";
+
+  return value
+    .replace(
+      /[۰-۹]/g,
+      (digit) =>
+        String(
+          persianDigits.indexOf(
+            digit
+          )
+        )
+    )
+    .replace(
+      /[٠-٩]/g,
+      (digit) =>
+        String(
+          arabicDigits.indexOf(
+            digit
+          )
+        )
+    );
 }

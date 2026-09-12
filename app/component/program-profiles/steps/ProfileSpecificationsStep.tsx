@@ -16,6 +16,22 @@ import type {
 } from "@/app/types/program-profile";
 
 
+/*
+ * مدت‌های پیشنهادی از ۱۰ تا ۲۴۰ دقیقه.
+ * مقدار نهایی با فرمت TimeSpan برای Backend نگهداری می‌شود.
+ */
+const PROGRAM_DURATION_OPTIONS =
+  Array.from(
+    {
+      length: 24,
+    },
+    (_, index) =>
+      formatDuration(
+        (index + 1) * 10
+      )
+  );
+
+
 interface ProfileSpecificationsStepProps {
   /*
    * اطلاعات مرحله اول از
@@ -350,6 +366,7 @@ export default function ProfileSpecificationsStep({
               <input
                 type="text"
                 inputMode="numeric"
+                list="program-duration-options"
                 value={
                   data.duration
                 }
@@ -380,6 +397,24 @@ export default function ProfileSpecificationsStep({
                   focus:ring-[#007fcf]/10
                 "
               />
+
+
+              <datalist
+                id="program-duration-options"
+              >
+                {PROGRAM_DURATION_OPTIONS.map(
+                  (duration) => (
+                    <option
+                      key={duration}
+                      value={duration}
+                    >
+                      {formatDurationLabel(
+                        duration
+                      )}
+                    </option>
+                  )
+                )}
+              </datalist>
             </div>
 
 
@@ -390,7 +425,7 @@ export default function ProfileSpecificationsStep({
                 text-gray-500
               "
             >
-              مدت را با فرمت ساعت:دقیقه:ثانیه وارد کنید؛ مانند 01:30:00.
+              یک مدت پیشنهادی را انتخاب کنید یا مدت دلخواه را با فرمت ساعت:دقیقه:ثانیه وارد کنید؛ مانند 01:30:00.
             </p>
           </label>
 
@@ -824,6 +859,68 @@ function validateSpecifications(
 
 
   return null;
+}
+
+
+/*
+ * تبدیل تعداد دقیقه به TimeSpan.
+ * مثال: ۹۰ دقیقه => 01:30:00
+ */
+function formatDuration(
+  totalMinutes: number
+): string {
+  const hours =
+    Math.floor(
+      totalMinutes / 60
+    );
+
+  const minutes =
+    totalMinutes % 60;
+
+  return (
+    String(hours).padStart(
+      2,
+      "0"
+    ) +
+    ":" +
+    String(minutes).padStart(
+      2,
+      "0"
+    ) +
+    ":00"
+  );
+}
+
+
+/*
+ * عنوان فارسی گزینه‌های مدت برنامه.
+ */
+function formatDurationLabel(
+  duration: string
+): string {
+  const [
+    hoursText,
+    minutesText,
+  ] = duration.split(":");
+
+  const hours =
+    Number(hoursText);
+
+  const minutes =
+    Number(minutesText);
+
+  if (hours === 0) {
+    return `${toPersianNumber(minutes)} دقیقه`;
+  }
+
+  if (minutes === 0) {
+    return `${toPersianNumber(hours)} ساعت`;
+  }
+
+  return (
+    `${toPersianNumber(hours)} ساعت و ` +
+    `${toPersianNumber(minutes)} دقیقه`
+  );
 }
 
 

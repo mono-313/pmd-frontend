@@ -1587,13 +1587,15 @@ function normalizeItems(
         return [];
       }
 
-
       const itemName =
         getString(
           item,
           [
             "itemName",
             "ItemName",
+
+            "itemTitle",
+            "ItemTitle",
 
             "name",
             "Name",
@@ -1603,25 +1605,60 @@ function normalizeItems(
           ]
         );
 
-
       if (!itemName) {
         return [];
       }
 
-
       return [
         {
+          itemId:
+            getNullableNumber(
+              item,
+              [
+                "itemId",
+                "ItemId",
+
+                "id",
+                "Id",
+              ]
+            ),
+
           itemName,
+
+          itemSubject:
+            getString(
+              item,
+              [
+                "itemSubject",
+                "ItemSubject",
+
+                "subject",
+                "Subject",
+              ]
+            ),
+
+          /*
+           * در پاسخ فعلی وب‌سرویس
+           * نوع تولید وجود ندارد.
+           */
+          productionTypeId:
+            getNullableNumber(
+              item,
+              [
+                "productionTypeId",
+                "ProductionTypeId",
+              ]
+            ),
 
           productionType:
             getString(
               item,
               [
+                "productionTypeName",
+                "ProductionTypeName",
+
                 "productionType",
                 "ProductionType",
-
-                "productionMethod",
-                "ProductionMethod",
               ]
             ),
 
@@ -1632,6 +1669,12 @@ function normalizeItems(
                 [
                   "duration",
                   "Duration",
+
+                  "itemDuration",
+                  "ItemDuration",
+
+                  "itemPeriod",
+                  "ItemPeriod",
                 ]
               )
             ),
@@ -1640,7 +1683,6 @@ function normalizeItems(
     }
   );
 }
-
 
 /*
  * تبدیل گزینه‌های id/name
@@ -2192,32 +2234,35 @@ function getBoolean(
 function normalizeTimeSpan(
   value: string
 ): string {
-  const normalized =
+  const normalizedValue =
     normalizeDigits(
       value.trim()
     );
 
+  if (!normalizedValue) {
+    return "00:00:00";
+  }
+
+  /*
+   * حذف اعشار انتهای TimeSpan:
+   * 00:05:00.0000000
+   * تبدیل می‌شود به:
+   * 00:05:00
+   */
+  const withoutFraction =
+    normalizedValue.replace(
+      /(\d{2}:\d{2}:\d{2})\.\d+$/,
+      "$1"
+    );
 
   if (
     /^\d{2,}:[0-5]\d:[0-5]\d$/
-      .test(normalized)
+      .test(withoutFraction)
   ) {
-    return normalized;
+    return withoutFraction;
   }
 
-
-  if (
-    /^\d{2}:[0-5]\d$/
-      .test(normalized)
-  ) {
-    return (
-      normalized +
-      ":00"
-    );
-  }
-
-
-  return normalized;
+  return "00:00:00";
 }
 
 
@@ -2482,4 +2527,56 @@ function findLookupName(
     )?.name ??
     ""
   );
+}
+
+
+
+function getNullableNumber(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyNames:
+    string[]
+): number | null {
+  for (
+    const propertyName of
+    propertyNames
+  ) {
+    const propertyValue =
+      value[propertyName];
+
+    if (
+      typeof propertyValue ===
+        "number" &&
+      Number.isFinite(
+        propertyValue
+      )
+    ) {
+      return propertyValue;
+    }
+
+    if (
+      typeof propertyValue ===
+        "string" &&
+      propertyValue.trim()
+    ) {
+      const numericValue =
+        Number(
+          normalizeDigits(
+            propertyValue
+          )
+        );
+
+      if (
+        Number.isFinite(
+          numericValue
+        )
+      ) {
+        return numericValue;
+      }
+    }
+  }
+
+  return null;
 }
