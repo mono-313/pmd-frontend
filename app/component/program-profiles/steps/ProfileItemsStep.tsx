@@ -69,6 +69,14 @@ export default function ProfileItemsStep({
     null
   );
 
+  /*
+   * خطای اعتبارسنجی نوع تولید
+   */
+  const [
+    validationError,
+    setValidationError,
+  ] = useState("");
+
   const menuContainerRef =
     useRef<HTMLDivElement | null>(
       null
@@ -155,6 +163,78 @@ export default function ProfileItemsStep({
     setDeletingIndex(
       null
     );
+  }
+
+
+  /*
+   * ثبت نوع تولید هر آیتم
+   * در FormData مرکزی Wizard
+   */
+  function handleProductionTypeChange(
+    index: number,
+    productionType: string
+  ) {
+    const updatedItems =
+      items.map(
+        (
+          item,
+          itemIndex
+        ) =>
+          itemIndex === index
+            ? {
+                ...item,
+                productionType,
+              }
+            : item
+      );
+
+
+    onChange(
+      updatedItems
+    );
+
+
+    if (
+      updatedItems.every(
+        (item) =>
+          item.productionType
+            .trim()
+      )
+    ) {
+      setValidationError("");
+    }
+  }
+
+
+  /*
+   * جلوگیری از رفتن به مرحله بعد
+   * تا زمانی که نوع تولید تمام
+   * آیتم‌ها تکمیل نشده باشد.
+   */
+  function handleNext() {
+    const firstInvalidItemIndex =
+      items.findIndex(
+        (item) =>
+          !item.productionType
+            .trim()
+      );
+
+
+    if (
+      firstInvalidItemIndex !== -1
+    ) {
+      setValidationError(
+        `نوع تولید آیتم ردیف ${toPersianNumber(
+          firstInvalidItemIndex + 1
+        )} الزامی است.`
+      );
+
+      return;
+    }
+
+
+    setValidationError("");
+    onNext();
   }
 
 
@@ -267,6 +347,24 @@ export default function ProfileItemsStep({
         </div>
 
 
+        {validationError && (
+          <div
+            className="
+              mb-5
+              rounded-lg
+              border border-red-200
+              bg-red-50
+              px-4 py-3
+              text-sm
+              text-red-700
+            "
+            role="alert"
+          >
+            {validationError}
+          </div>
+        )}
+
+
         {/* جدول آیتم‌ها */}
         <div
           className="
@@ -278,7 +376,7 @@ export default function ProfileItemsStep({
           <table
             className="
               w-full
-              min-w-[700px]
+              min-w-[900px]
               text-sm
             "
           >
@@ -318,6 +416,23 @@ export default function ProfileItemsStep({
                   "
                 >
                  موضوع
+                </th>
+
+                <th
+                  className="
+                    min-w-[190px]
+                    px-4 py-4
+                    text-right
+                    font-bold
+                  "
+                >
+                  نوع تولید
+
+                  <span
+                    className="mr-1 text-red-500"
+                  >
+                    *
+                  </span>
                 </th>
 
                 <th
@@ -396,6 +511,52 @@ export default function ProfileItemsStep({
                       {
                         item.itemSubject
                       }
+                    </td>
+
+
+                    <td
+                      className="
+                        min-w-[190px]
+                        px-4 py-4
+                      "
+                    >
+                      <input
+                        type="text"
+                        value={
+                          item.productionType
+                        }
+                        onChange={(event) =>
+                          handleProductionTypeChange(
+                            index,
+                            event.target.value
+                          )
+                        }
+                        placeholder="نوع تولید را وارد کنید"
+                        aria-label={
+                          `نوع تولید آیتم ${index + 1}`
+                        }
+                        aria-required="true"
+                        className={`
+                          w-full
+                          rounded-lg
+                          border
+                          bg-white
+                          px-3 py-2.5
+                          text-sm
+                          text-gray-700
+                          outline-none
+                          transition
+                          placeholder:text-gray-400
+                          focus:ring-2
+                          focus:ring-blue-100
+                          ${
+                            validationError &&
+                            !item.productionType.trim()
+                              ? "border-red-300 focus:border-red-400"
+                              : "border-gray-300 focus:border-[#007fcf]"
+                          }
+                        `}
+                      />
                     </td>
 
 
@@ -519,7 +680,7 @@ export default function ProfileItemsStep({
               {items.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="
                       px-4 py-12
                       text-center
@@ -617,7 +778,7 @@ export default function ProfileItemsStep({
           <button
             type="button"
             onClick={
-              onNext
+              handleNext
             }
             className="
               inline-flex

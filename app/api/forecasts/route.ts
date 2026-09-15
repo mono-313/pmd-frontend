@@ -18,145 +18,279 @@ import type {
 
 
 /* GET /api/forecasts - دریافت فهرست پیش‌بینی‌ها */
-export async function GET
-(request: Request) {
+/*
+ * GET /api/forecasts
+ *
+ * دریافت فهرست پیش‌بینی‌ها
+ *
+ * Backend براساس Role موجود
+ * در Token رکوردها را فیلتر می‌کند:
+ *
+ * Admin:
+ * تمام رکوردها
+ *
+ * NetworkManager:
+ * رکوردهای شبکه‌های کاربر
+ *
+ * NetworkGroupManager:
+ * رکوردهای گروه برنامه‌ساز
+ *
+ * Providers:
+ * رکوردهای ثبت‌شده توسط کاربر
+ */
+export async function GET(
+  request: Request
+) {
   try {
-    const accessToken = await getAccessToken();
+    const accessToken =
+      await getAccessToken();
+
 
     if (!accessToken) {
-      return jsonError("نشست کاربری معتبر نیست.", 401);
-    }
-
-    const requestUrl = new URL(request.url);
-    const backendUrl = new URL(
-      `${API_CONFIG.baseUrl}${API_ENDPOINTS.forecasts.list}`
-    );
-
-    const allowedParameters = [
-  "planId",
-  "status",
-  "fromDate",
-  "toDate",
-  "pageNumber",
-  "pageSize",
-];
-
-
-    for (const parameterName of allowedParameters) {
-      const value = requestUrl.searchParams.get(parameterName);
-
-      if (value?.trim()) {
-        backendUrl.searchParams.set(parameterName, value);
-      }
-    }
-
-    if (!backendUrl.searchParams.has("pageNumber")) {
-      backendUrl.searchParams.set("pageNumber", "1");
-    }
-
-    if (!backendUrl.searchParams.has("pageSize")) {
-      backendUrl.searchParams.set("pageSize", "10");
-    }
-
-    const backendResponse = await fetch(backendUrl.toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
-    });
-
-    const responseText = await backendResponse.text();
-    const responseData = parseJsonResponse(responseText);
-    //test
-    console.log(
-  "Forecast list backend response:",
-  {
-    status:
-      backendResponse.status,
-
-    contentType:
-      backendResponse.headers.get(
-        "content-type"
-      ),
-
-    pagination:
-      backendResponse.headers.get(
-        "Pagination"
-      ),
-
-    responseText,
-    }
-  );
-
-    if (!backendResponse.ok) {
-      return createBackendErrorResponse(
-        backendResponse.status,
-        responseData,
-        `دریافت فهرست پیش‌بینی‌ها انجام نشد. کد پاسخ Backend: ${backendResponse.status}`
+      return jsonError(
+        "نشست کاربری معتبر نیست.",
+        401
       );
     }
 
-    const forecasts = getForecastItems(responseData);
 
-    if (!forecasts) {
-  console.error(
-    "Invalid forecast list structure:",
-    {
-      responseData,
-      responseText,
+    const requestUrl =
+      new URL(
+        request.url
+      );
+
+
+    const backendUrl =
+      new URL(
+        joinUrl(
+          API_CONFIG.baseUrl,
+          API_ENDPOINTS
+            .forecasts.list
+        )
+      );
+
+
+    /*
+     * فقط پارامترهای مجاز مستند
+     * برای Backend ارسال می‌شوند.
+     */
+    const allowedParameters = [
+      "planId",
+      "status",
+      "fromDate",
+      "toDate",
+      "pageNumber",
+      "pageSize",
+    ] as const;
+
+
+    for (
+      const parameterName of
+      allowedParameters
+    ) {
+      const parameterValue =
+        requestUrl.searchParams
+          .get(
+            parameterName
+          )
+          ?.trim();
+
+
+      if (parameterValue) {
+        backendUrl.searchParams.set(
+          parameterName,
+          parameterValue
+        );
+      }
     }
-  );
 
-  return NextResponse.json(
-    {
-      message:
-        "ساختار پاسخ فهرست پیش‌بینی‌ها معتبر نیست.",
 
-      /*
-       * فقط برای عیب‌یابی موقت
-       */
-      receivedType:
-        Array.isArray(
-          responseData
-        )
-          ? "array"
-          : typeof responseData,
+    /*
+     * pageNumber و pageSize در
+     * Backend جدید اجباری هستند.
+     */
+    if (
+      !backendUrl.searchParams.has(
+        "pageNumber"
+      )
+    ) {
+      backendUrl.searchParams.set(
+        "pageNumber",
+        "1"
+      );
+    }
 
-      receivedKeys:
-        isRecord(
-          responseData
-        )
-          ? Object.keys(
+
+    if (
+      !backendUrl.searchParams.has(
+        "pageSize"
+      )
+    ) {
+      backendUrl.searchParams.set(
+        "pageSize",
+        "10"
+      );
+    }
+
+
+    const backendResponse =
+      await fetch(
+        backendUrl.toString(),
+        {
+          method:
+            "GET",
+
+          headers: {
+            Accept:
+              "application/json",
+
+            Authorization:
+              `Bearer ${accessToken}`,
+          },
+
+          cache:
+            "no-store",
+        }
+      );
+
+
+    const responseText =
+      await backendResponse.text();
+
+
+    const responseData =
+      parseJsonResponse(
+        responseText
+      );
+
+
+    if (!backendResponse.ok) {
+      return NextResponse.json(
+        {
+          message:
+            getApiErrorMessage(
               responseData
-            )
-          : [],
-    },
-    {
-      status: 502,
+            ) ??
+            (
+              "دریافت فهرست پیش‌بینی‌ها انجام نشد. " +
+              `کد پاسخ Backend: ${
+                backendResponse.status
+              }`
+            ),
+
+          /*
+           * برای مدیریت دقیق‌تر خطاها
+           * در Frontend حفظ می‌شود.
+           */
+          code:
+            getStringField(
+              responseData,
+              "code"
+            ),
+
+          details:
+            responseData ??
+            (
+              responseText.trim()
+                ? responseText
+                : null
+            ),
+        },
+        {
+          status:
+            backendResponse.status,
+        }
+      );
     }
-  );
-}
 
-    const pagination = getPaginationMetadata(
-      backendResponse,
-      backendUrl.searchParams,
-      forecasts.length
-    );
 
-    const result: ForecastListResponse = {
-      items: forecasts,
+    /*
+     * طبق مستند، پاسخ اصلی Backend
+     * مستقیماً آرایه Forecast است.
+     *
+     * برای جلوگیری از خرابی در صورت
+     * Wrapper شدن پاسخ، ساختارهای
+     * متداول قبلی نیز پشتیبانی می‌شوند.
+     */
+    const forecasts =
+      getForecastItems(
+        responseData
+      );
+
+
+    if (forecasts === null) {
+      console.error(
+        "Invalid forecast list response:",
+        {
+          backendUrl:
+            backendUrl.toString(),
+
+          status:
+            backendResponse.status,
+
+          response:
+            responseData ??
+            responseText,
+        }
+      );
+
+
+      return NextResponse.json(
+        {
+          message:
+            "فهرست پیش‌بینی‌ها در پاسخ وب‌سرویس پیدا نشد.",
+
+          details:
+            responseData ??
+            responseText,
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+
+    /*
+     * Backend اطلاعات Pagination را
+     * داخل Header برمی‌گرداند.
+     */
+    const pagination =
+      getPaginationMetadata(
+        backendResponse,
+        backendUrl.searchParams,
+        forecasts.length
+      );
+
+
+    const result:
+      ForecastListResponse = {
+      items:
+        forecasts,
+
       pagination,
     };
 
-    return NextResponse.json(result, { status: 200 });
+
+    return NextResponse.json(
+      result,
+      {
+        status: 200,
+      }
+    );
   } catch (error) {
-    console.error("Get forecasts route error:", error);
-    return jsonError("ارتباط با وب‌سرویس پیش‌بینی‌ها برقرار نشد.", 500);
+    console.error(
+      "Get forecasts route error:",
+      error
+    );
+
+
+    return jsonError(
+      "ارتباط با وب‌سرویس پیش‌بینی‌ها برقرار نشد.",
+      500
+    );
   }
 }
-
 /* POST /api/forecasts - ایجاد Forecast و ارسال اختیاری برای بررسی */
 export async function POST(request: Request) {
   try {
@@ -407,19 +541,27 @@ async function getAccessToken(): Promise<string | undefined> {
   return (await cookies()).get("access-token")?.value;
 }
 
+/*
+ * استخراج آرایه Forecast
+ * از پاسخ Backend
+ */
 function getForecastItems(
   value: unknown
 ): ForecastResponse[] | null {
   /*
-   * حالت اصلی مطابق داکیومنت:
-   * Backend مستقیماً آرایه برمی‌گرداند.
+   * ساختار اصلی مستند جدید:
+   *
+   * [
+   *   {...},
+   *   {...}
+   * ]
    */
   if (Array.isArray(value)) {
     return value.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
+      isForecastListItem
+    );
   }
+
 
   if (!isRecord(value)) {
     return null;
@@ -427,40 +569,39 @@ function getForecastItems(
 
 
   /*
-   * برخی Backendها آرایه را داخل
-   * items برمی‌گردانند.
+   * پشتیبانی از Wrapperهای احتمالی
+   * برای جلوگیری از سخت‌گیری غیرضروری.
    */
-  if (
-    Array.isArray(
-      value.items
-    )
+  const directCandidates = [
+    value.items,
+    value.forecasts,
+    value.result,
+    value.$values,
+  ];
+
+
+  for (
+    const candidate of
+    directCandidates
   ) {
-    return value.items.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
+    if (
+      Array.isArray(
+        candidate
+      )
+    ) {
+      return candidate.filter(
+        isForecastListItem
+      );
+    }
   }
 
 
   /*
-   * پشتیبانی از ساختار:
-   * { forecasts: [...] }
-   */
-  if (
-    Array.isArray(
-      value.forecasts
-    )
-  ) {
-    return value.forecasts.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
-  }
-
-
-  /*
-   * پشتیبانی از ساختار:
-   * { data: [...] }
+   * ساختار:
+   *
+   * {
+   *   data: [...]
+   * }
    */
   if (
     Array.isArray(
@@ -468,52 +609,79 @@ function getForecastItems(
     )
   ) {
     return value.data.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
+      isForecastListItem
+    );
   }
 
 
   /*
-   * بعضی نسخه‌های ASP.NET:
-   * { $values: [...] }
-   */
-  if (
-    Array.isArray(
-      value.$values
-    )
-  ) {
-    return value.$values.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
-  }
-
-
-  /*
-   * ساختار:
+   * ساختارهای تو در تو:
+   *
    * {
    *   data: {
    *     items: [...]
    *   }
    * }
    */
-  if (
-    isRecord(
-      value.data
-    ) &&
-    Array.isArray(
-      value.data.items
-    )
-  ) {
-    return value.data.items.filter(
-      isRecord
-    ) as unknown as
-      ForecastResponse[];
+  if (isRecord(value.data)) {
+    const nestedCandidates = [
+      value.data.items,
+      value.data.forecasts,
+      value.data.result,
+      value.data.$values,
+    ];
+
+
+    for (
+      const candidate of
+      nestedCandidates
+    ) {
+      if (
+        Array.isArray(
+          candidate
+        )
+      ) {
+        return candidate.filter(
+          isForecastListItem
+        );
+      }
+    }
   }
 
 
   return null;
+}
+
+
+/*
+ * بررسی حداقلی هر Forecast
+ *
+ * عمداً فقط فیلدهای اصلی بررسی
+ * می‌شوند تا اضافه‌شدن فیلدهای جدید
+ * Backend باعث رد کل پاسخ نشود.
+ */
+function isForecastListItem(
+  value: unknown
+): value is ForecastResponse {
+  return (
+    isRecord(value) &&
+
+    typeof value.id ===
+      "string" &&
+
+    Boolean(
+      value.id.trim()
+    ) &&
+
+    typeof value.planId ===
+      "number" &&
+
+    typeof value.mainTopic ===
+      "string" &&
+
+    typeof value.status ===
+      "string"
+  );
 }
 
 function getForecastResponse(
@@ -978,6 +1146,138 @@ function normalizeDigits(
 }
 
 
+/*
+ * دریافت اولین عدد معتبر
+ * از چند نام احتمالی
+ */
+function getFirstFiniteNumber(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyNames:
+    readonly string[],
+  fallback: number
+): number {
+  for (
+    const propertyName of
+    propertyNames
+  ) {
+    const result =
+      getFiniteNumber(
+        value[propertyName],
+        Number.NaN
+      );
+
+
+    if (
+      Number.isFinite(
+        result
+      )
+    ) {
+      return result;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+/*
+ * دریافت اولین Boolean معتبر
+ */
+function getFirstBoolean(
+  value: Record<
+    string,
+    unknown
+  >,
+  propertyNames:
+    readonly string[],
+  fallback: boolean
+): boolean {
+  for (
+    const propertyName of
+    propertyNames
+  ) {
+    const propertyValue =
+      value[propertyName];
+
+
+    if (
+      typeof propertyValue ===
+      "boolean"
+    ) {
+      return propertyValue;
+    }
+
+
+    if (
+      propertyValue === "true"
+    ) {
+      return true;
+    }
+
+
+    if (
+      propertyValue === "false"
+    ) {
+      return false;
+    }
+  }
+
+
+  return fallback;
+}
+
+
+/*
+ * استخراج یک String از
+ * پاسخ احتمالی Backend
+ */
+function getStringField(
+  value: unknown,
+  propertyName: string
+): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+
+  const propertyValue =
+    value[propertyName];
+
+
+  return (
+    typeof propertyValue ===
+      "string" &&
+    propertyValue.trim()
+  )
+    ? propertyValue.trim()
+    : null;
+}
+
+
+/*
+ * اتصال امن Base URL
+ * و مسیر Endpoint
+ */
+function joinUrl(
+  baseUrl: string,
+  endpoint: string
+): string {
+  return (
+    baseUrl.replace(
+      /\/+$/,
+      ""
+    ) +
+    "/" +
+    endpoint.replace(
+      /^\/+/,
+      ""
+    )
+  );
+}
 
 
 

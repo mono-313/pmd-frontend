@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 
@@ -12,6 +12,7 @@ import {
 
 import {
   Eye,
+  RefreshCw,
 } from "lucide-react";
 
 import type {
@@ -27,15 +28,20 @@ export default function ForecastReviewPage() {
   const router =
     useRouter();
 
+
   const [
     forecasts,
     setForecasts,
-  ] = useState<Forecast[]>([]);
+  ] = useState<Forecast[]>(
+    []
+  );
+
 
   const [
     isLoading,
     setIsLoading,
   ] = useState(true);
+
 
   const [
     error,
@@ -44,116 +50,99 @@ export default function ForecastReviewPage() {
 
 
   /*
-   * دریافت پیش‌بینی‌های ارسال‌شده
-   * برای بررسی مدیر گروه
+   * دریافت پیش‌بینی‌های
+   * در انتظار بررسی
+   *
+   * Backend براساس Role و
+   * networkGroupId مدیر، محدوده
+   * رکوردها را مشخص می‌کند.
    */
-  useEffect(() => {
-    let cancelled =
-      false;
+  const loadForecasts =
+    useCallback(
+      async (
+        signal?: AbortSignal
+      ) => {
+        try {
+          setIsLoading(true);
+          setError("");
 
-    async function loadItems() {
-      try {
-        setIsLoading(true);
-        setError("");
 
-        const items =
-          await getReviewForecasts();
+          const items =
+            await getReviewForecasts();
 
-        if (!cancelled) {
+
+          if (signal?.aborted) {
+            return;
+          }
+
+
           setForecasts(
-            Array.isArray(items)
-              ? items
-              : []
+            items
           );
-        }
-      } catch (loadError) {
-        if (!cancelled) {
+        } catch (loadError) {
+          if (signal?.aborted) {
+            return;
+          }
+
+
           setForecasts([]);
 
+
           setError(
-            loadError instanceof Error
+            loadError instanceof
+              Error
               ? loadError.message
-              : "دریافت موضوعات انجام نشد."
+              : "دریافت موضوعات نیازمند بررسی انجام نشد."
           );
+        } finally {
+          if (!signal?.aborted) {
+            setIsLoading(false);
+          }
         }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadItems();
-
-    return () => {
-      cancelled =
-        true;
-    };
-  }, []);
-
-
-  /*
-   * فقط موضوعات در انتظار بررسی
-   */
-  const pendingForecasts =
-    useMemo(
-      () =>
-        forecasts.filter(
-          (forecast) =>
-            isPendingReviewStatus(
-              forecast.status
-            )
-        ),
-      [forecasts]
+      },
+      []
     );
 
 
   /*
-   * رفتن به صفحه مشاهده و بررسی
+   * بارگذاری اولیه کارتابل
+   */
+  useEffect(() => {
+    const controller =
+      new AbortController();
+
+
+    void loadForecasts(
+      controller.signal
+    );
+
+
+    return () => {
+      controller.abort();
+    };
+  }, [loadForecasts]);
+
+
+  /*
+   * رفتن به صفحه مشاهده
+   * و تصمیم‌گیری مدیر
    */
   function handleReview(
     forecastId: string
   ) {
     router.push(
-      `/forecasts/review/${forecastId}`
+      `/forecasts/review/${encodeURIComponent(
+        forecastId
+      )}`
     );
   }
 
 
-  if (isLoading) {
-    return (
-      <main
-        className="
-          min-h-screen
-          bg-gray-50
-          px-4 py-8
-          sm:px-6
-        "
-        dir="rtl"
-      >
-        <section
-          className="
-            mx-auto
-            max-w-7xl
-          "
-        >
-          <div
-            className="
-              rounded-xl
-              border border-gray-200
-              bg-white
-              p-8
-              text-center
-              text-sm
-              text-gray-500
-              shadow-sm
-            "
-          >
-            در حال دریافت موارد نیازمند بررسی...
-          </div>
-        </section>
-      </main>
-    );
+  /*
+   * دریافت مجدد فهرست
+   */
+  function handleRefresh() {
+    void loadForecasts();
   }
 
 
@@ -174,27 +163,77 @@ export default function ForecastReviewPage() {
         "
       >
         {/* عنوان صفحه */}
-        <header className="mb-6">
-          <h1
-            className="
-              text-2xl
-              font-bold
-              text-gray-800
-            "
-          >
-            موضوعات نیازمند بررسی
-          </h1>
+        <header
+          className="
+            mb-6
+            flex
+            flex-wrap
+            items-center
+            justify-between
+            gap-4
+          "
+        >
+          <div>
+            <h1
+              className="
+                text-2xl
+                font-bold
+                text-gray-800
+              "
+            >
+              کارتابل بررسی موضوعات
+            </h1>
 
-          <p
+            <p
+              className="
+                mt-2
+                text-sm
+                leading-7
+                text-gray-500
+              "
+            >
+              پیش‌بینی‌های در انتظار بررسی مربوط به گروه برنامه‌ساز شما در این بخش نمایش داده می‌شوند.
+            </p>
+          </div>
+
+
+          <button
+            type="button"
+            onClick={
+              handleRefresh
+            }
+            disabled={
+              isLoading
+            }
             className="
-              mt-2
+              inline-flex
+              items-center
+              justify-center
+              gap-2
+              rounded-lg
+              border border-gray-300
+              bg-white
+              px-4 py-2.5
               text-sm
-              text-gray-500
+              font-semibold
+              text-gray-700
+              transition
+              hover:bg-gray-50
+              disabled:cursor-not-allowed
+              disabled:opacity-50
             "
           >
-            موضوعات ارسال‌شده برای مدیر گروه در این بخش
-            نمایش داده می‌شوند.
-          </p>
+            <RefreshCw
+              size={17}
+              className={
+                isLoading
+                  ? "animate-spin"
+                  : ""
+              }
+            />
+
+            به‌روزرسانی
+          </button>
         </header>
 
 
@@ -208,250 +247,330 @@ export default function ForecastReviewPage() {
               bg-red-50
               px-4 py-3
               text-sm
+              leading-7
               text-red-700
             "
+            role="alert"
           >
             {error}
           </div>
         )}
 
 
-        {/* جدول کارتابل */}
-        <div
-          className="
-            overflow-hidden
-            rounded-xl
-            border border-gray-200
-            bg-white
-            shadow-sm
-          "
-        >
-          <div className="overflow-x-auto">
-            <table
+        {/* حالت دریافت اطلاعات */}
+        {isLoading ? (
+          <div
+            className="
+              rounded-xl
+              border border-gray-200
+              bg-white
+              p-10
+              text-center
+              text-sm
+              text-gray-500
+              shadow-sm
+            "
+          >
+            <RefreshCw
+              size={24}
               className="
-                w-full
-                min-w-[760px]
-                text-sm
+                mx-auto
+                mb-3
+                animate-spin
+                text-[#007fcf]
+              "
+            />
+
+            در حال دریافت موارد نیازمند بررسی...
+          </div>
+        ) : (
+          /*
+           * جدول کارتابل
+           */
+          <div
+            className="
+              overflow-hidden
+              rounded-xl
+              border border-gray-200
+              bg-white
+              shadow-sm
+            "
+          >
+            <div
+              className="
+                overflow-x-auto
               "
             >
-              <thead
+              <table
                 className="
-                  bg-gray-50
-                  text-gray-700
+                  w-full
+                  min-w-[920px]
+                  text-sm
                 "
               >
-                <tr>
-                  <th
-                    className="
-                      w-20
-                      px-4 py-4
-                      text-center
-                      font-bold
-                    "
-                  >
-                    ردیف
-                  </th>
-
-                  <th
-                    className="
-                      px-4 py-4
-                      text-right
-                      font-bold
-                    "
-                  >
-                    موضوع اصلی
-                  </th>
-
-                  <th
-                    className="
-                      px-4 py-4
-                      text-center
-                      font-bold
-                    "
-                  >
-                    تاریخ پخش
-                  </th>
-
-                  <th
-                    className="
-                      px-4 py-4
-                      text-center
-                      font-bold
-                    "
-                  >
-                    شماره قسمت
-                  </th>
-
-                  <th
-                    className="
-                      px-4 py-4
-                      text-center
-                      font-bold
-                    "
-                  >
-                    وضعیت
-                  </th>
-
-                  <th
-                    className="
-                      px-4 py-4
-                      text-center
-                      font-bold
-                    "
-                  >
-                    عملیات
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {pendingForecasts.map(
-                  (
-                    forecast,
-                    index
-                  ) => (
-                    <tr
-                      key={forecast.id}
+                <thead
+                  className="
+                    bg-gray-50
+                    text-gray-700
+                  "
+                >
+                  <tr>
+                    <th
                       className="
-                        border-t
-                        border-gray-100
-                        text-gray-700
-                        transition-colors
-                        hover:bg-blue-50/40
+                        w-16
+                        px-4 py-4
+                        text-center
+                        font-bold
                       "
                     >
-                      <td
-                        className="
-                          px-4 py-4
-                          text-center
-                        "
-                      >
-                        {toPersianNumber(
-                          index + 1
-                        )}
-                      </td>
+                      ردیف
+                    </th>
 
-                      <td
-                        className="
-                          px-4 py-4
-                          font-semibold
-                          text-gray-800
-                        "
-                      >
-                        {forecast.mainTopic ||
-                          "—"}
-                      </td>
+                    <th
+                      className="
+                        min-w-[220px]
+                        px-4 py-4
+                        text-right
+                        font-bold
+                      "
+                    >
+                      موضوع اصلی
+                    </th>
 
-                      <td
-                        className="
-                          whitespace-nowrap
-                          px-4 py-4
-                          text-center
-                        "
-                      >
-                        {formatJalaliDate(
-                          forecast.broadcastDate
-                        )}
-                      </td>
+                    <th
+                      className="
+                        min-w-[150px]
+                        px-4 py-4
+                        text-right
+                        font-bold
+                      "
+                    >
+                      ثبت‌کننده
+                    </th>
 
-                      <td
-                        className="
-                          px-4 py-4
-                          text-center
-                        "
-                      >
-                        {forecast.episodeNumber !=
-                        null
-                          ? toPersianNumber(
-                              forecast
-                                .episodeNumber
-                            )
-                          : "—"}
-                      </td>
+                    <th
+                      className="
+                        min-w-[130px]
+                        px-4 py-4
+                        text-center
+                        font-bold
+                      "
+                    >
+                      تاریخ پخش
+                    </th>
 
-                      <td
+                    <th
+                      className="
+                        min-w-[100px]
+                        px-4 py-4
+                        text-center
+                        font-bold
+                      "
+                    >
+                      شماره قسمت
+                    </th>
+
+                    <th
+                      className="
+                        min-w-[150px]
+                        px-4 py-4
+                        text-center
+                        font-bold
+                      "
+                    >
+                      وضعیت
+                    </th>
+
+                    <th
+                      className="
+                        min-w-[170px]
+                        px-4 py-4
+                        text-center
+                        font-bold
+                      "
+                    >
+                      عملیات
+                    </th>
+                  </tr>
+                </thead>
+
+
+                <tbody>
+                  {forecasts.map(
+                    (
+                      forecast,
+                      index
+                    ) => (
+                      <tr
+                        key={
+                          forecast.id
+                        }
                         className="
-                          px-4 py-4
-                          text-center
+                          border-t
+                          border-gray-100
+                          text-gray-700
+                          transition-colors
+                          hover:bg-blue-50/40
                         "
                       >
-                        <span
+                        <td
                           className="
-                            inline-flex
-                            items-center
-                            rounded-full
-                            bg-amber-100
-                            px-3 py-1
-                            text-xs
-                            font-bold
-                            text-amber-700
+                            px-4 py-4
+                            text-center
+                            text-gray-500
                           "
                         >
-                          در انتظار بررسی
-                        </span>
-                      </td>
+                          {toPersianNumber(
+                            index + 1
+                          )}
+                        </td>
 
-                      <td
-                        className="
-                          px-4 py-4
-                          text-center
-                        "
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleReview(
-                              forecast.id
-                            )
-                          }
+
+                        <td
                           className="
-                            inline-flex
-                            items-center
-                            justify-center
-                            gap-2
-                            rounded-lg
-                            bg-[#007fcf]
-                            px-4 py-2
+                            px-4 py-4
                             font-semibold
-                            text-white
-                            shadow-sm
-                            transition
-                            hover:bg-[#006daf]
-                            focus:outline-none
-                            focus:ring-2
-                            focus:ring-[#007fcf]/30
+                            leading-7
+                            text-gray-800
                           "
                         >
-                          <Eye size={17} />
-
-                          مشاهده و بررسی
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
+                          {forecast.mainTopic
+                            .trim() ||
+                            "—"}
+                        </td>
 
 
-                {!error &&
-                  pendingForecasts.length ===
-                    0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="
-                          px-4 py-12
-                          text-center
-                          text-gray-500
-                        "
-                      >
-                        موردی نیازمند بررسی نیست.
-                      </td>
-                    </tr>
+                        <td
+                          className="
+                            px-4 py-4
+                            text-gray-700
+                          "
+                        >
+                          {forecast
+                            .createdByUserName
+                            ?.trim() ||
+                            "—"}
+                        </td>
+
+
+                        <td
+                          className="
+                            whitespace-nowrap
+                            px-4 py-4
+                            text-center
+                          "
+                        >
+                          {formatJalaliDate(
+                            forecast
+                              .broadcastDate
+                          )}
+                        </td>
+
+
+                        <td
+                          className="
+                            px-4 py-4
+                            text-center
+                          "
+                        >
+                          {forecast
+                            .episodeNumber !=
+                          null
+                            ? toPersianNumber(
+                                forecast
+                                  .episodeNumber
+                              )
+                            : "—"}
+                        </td>
+
+
+                        <td
+                          className="
+                            px-4 py-4
+                            text-center
+                          "
+                        >
+                          <span
+                            className="
+                              inline-flex
+                              items-center
+                              rounded-full
+                              bg-amber-100
+                              px-3 py-1
+                              text-xs
+                              font-bold
+                              text-amber-700
+                            "
+                          >
+                            در انتظار بررسی
+                          </span>
+                        </td>
+
+
+                        <td
+                          className="
+                            px-4 py-4
+                            text-center
+                          "
+                        >
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleReview(
+                                forecast.id
+                              )
+                            }
+                            className="
+                              inline-flex
+                              items-center
+                              justify-center
+                              gap-2
+                              rounded-lg
+                              bg-[#007fcf]
+                              px-4 py-2
+                              font-semibold
+                              text-white
+                              shadow-sm
+                              transition
+                              hover:bg-[#006daf]
+                              focus:outline-none
+                              focus:ring-2
+                              focus:ring-[#007fcf]/30
+                            "
+                          >
+                            <Eye
+                              size={17}
+                            />
+
+                            مشاهده و بررسی
+                          </button>
+                        </td>
+                      </tr>
+                    )
                   )}
-              </tbody>
-            </table>
+
+
+                  {!error &&
+                    forecasts.length ===
+                      0 && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="
+                            px-4 py-12
+                            text-center
+                            text-gray-500
+                          "
+                        >
+                          موردی نیازمند بررسی نیست.
+                        </td>
+                      </tr>
+                    )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
       </section>
     </main>
   );
@@ -459,24 +578,7 @@ export default function ForecastReviewPage() {
 
 
 /*
- * تشخیص وضعیت PendingReview
- *
- * Backend ممکن است وضعیت را
- * به‌صورت عدد یا رشته برگرداند.
- */
-function isPendingReviewStatus(
-  status: unknown
-): boolean {
-  return (
-    status === 2 ||
-    status === "2" ||
-    status ===
-      "PendingReview"
-  );
-}
-
-
-/*
+ * تبدیل تاریخ میلادی Backend
  * به تاریخ شمسی قابل نمایش
  */
 function formatJalaliDate(
@@ -489,11 +591,18 @@ function formatJalaliDate(
     return "—";
   }
 
+
   const normalizedValue =
-    normalizeDigits(value);
+    normalizeDigits(
+      value
+    );
+
 
   const date =
-    new Date(normalizedValue);
+    new Date(
+      normalizedValue
+    );
+
 
   if (
     Number.isNaN(
@@ -502,6 +611,7 @@ function formatJalaliDate(
   ) {
     return "—";
   }
+
 
   return new Intl.DateTimeFormat(
     "fa-IR-u-ca-persian",
@@ -518,17 +628,24 @@ function formatJalaliDate(
       timeZone:
         "UTC",
     }
-  ).format(date);
+  ).format(
+    date
+  );
 }
 
 
 /*
- * تبدیل اعداد انگلیسی به فارسی
+ * تبدیل اعداد انگلیسی
+ * به فارسی
  */
 function toPersianNumber(
-  value: string | number
+  value:
+    string |
+    number
 ): string {
-  return String(value).replace(
+  return String(
+    value
+  ).replace(
     /\d/g,
     (digit) =>
       "۰۱۲۳۴۵۶۷۸۹"[
@@ -540,7 +657,7 @@ function toPersianNumber(
 
 /*
  * تبدیل اعداد فارسی و عربی
- * به انگلیسی برای ساخت Date
+ * به انگلیسی
  */
 function normalizeDigits(
   value: string
@@ -550,6 +667,7 @@ function normalizeDigits(
 
   const arabicDigits =
     "٠١٢٣٤٥٦٧٨٩";
+
 
   return value
     .replace(

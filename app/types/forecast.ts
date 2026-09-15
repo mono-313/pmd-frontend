@@ -1,3 +1,10 @@
+/*
+ * وضعیت‌های پیش‌بینی
+ *
+ * Backend طبق مستند جدید
+ * این Enum را به‌صورت رشته
+ * در JSON برمی‌گرداند.
+ */
 export type ForecastStatus =
   | "Draft"
   | "PendingReview"
@@ -6,83 +13,100 @@ export type ForecastStatus =
   | "ReturnedForEdit";
 
 
-  export interface ForecastTopicAxis {
-  id: string;
+/*
+ * محور موضوعی پیش‌بینی
+ */
+export interface ForecastTopicAxis {
+  id:
+    string;
 
-  title: string;
+  title:
+    string;
 
-  displayOrder: number;
+  displayOrder:
+    number;
 }
-
-
-//ایجاد داخل route sen for backend
-export interface CreateForecastRequest {
-  planId: number;
-
-  networkId: number;
-
-  networkGroupId: number;
-
-  broadcastDate: string;
-
-  mainTopic: string;
-
-  hasExpert: boolean;
-
-  topicAxes: string[];
-
-  expertIds: string[];
-}
-
 
 
 /*
- * درخواست ثبت نهایی ویزارد
+ * بدنه ارسالی مستقیم به Backend
+ * برای ایجاد پیش‌بینی
  *
- * این اطلاعات ابتدا به Route داخلی
- * Next.js ارسال می‌شوند.
+ * POST /api/forecasts
  */
-export interface FinalSubmitRequest {
-  planId: number;
+export interface CreateForecastRequest {
+  planId:
+    number;
 
-  networkId: number;
+  networkId:
+    number;
 
-  networkGroupId: number;
+  networkGroupId:
+    number;
 
-  broadcastDate: string;
+  broadcastDate:
+    string;
 
-  mainTopic: string;
+  mainTopic:
+    string;
 
-  hasExpert: boolean;
+  hasExpert:
+    boolean;
 
-  topicAxes: string[];
+  topicAxes:
+    string[];
 
-  expertIds: string[];
-
-  //for front
-  submitAfterCreate: boolean;
+  expertIds:
+    string[];
 }
 
 
+/*
+ * بدنه دریافتی Route داخلی
+ * از مرحله نهایی Wizard
+ *
+ * submitAfterCreate فقط مربوط
+ * به منطق Frontend است و نباید
+ * به درخواست Create Backend
+ * اضافه شود.
+ */
+export interface FinalSubmitRequest
+  extends CreateForecastRequest {
+  submitAfterCreate:
+    boolean;
+}
 
+
+/*
+ * پاسخ اصلی Forecast از Backend
+ */
 export interface ForecastResponse {
-  id: string;
+  id:
+    string;
 
-  planId: number;
+  planId:
+    number;
 
-  networkId: number;
+  networkId:
+    number;
 
-  networkGroupId: number;
+  networkGroupId:
+    number;
 
-  episodeNumber: number;
+  episodeNumber:
+    number;
 
-  broadcastDate: string;
+  broadcastDate:
+    string;
 
-  mainTopic: string;
+  mainTopic:
+    string;
 
-  hasExpert: boolean;
+  hasExpert:
+    boolean;
 
-  status: ForecastStatus;
+  status:
+    ForecastStatus;
 
   topicAxes:
     ForecastTopicAxis[];
@@ -90,6 +114,9 @@ export interface ForecastResponse {
   expertIds:
     string[];
 
+  /*
+   * اطلاعات ثبت‌کننده
+   */
   createdByUserId:
     string;
 
@@ -98,131 +125,331 @@ export interface ForecastResponse {
 
   createdDate:
     string;
+
+  /*
+   * آخرین تاریخ ویرایش ممکن است
+   * در برخی پاسخ‌ها وجود نداشته باشد.
+   */
+  lastModifiedDate?:
+    string | null;
+
+  /*
+   * پس از تأیید، رد یا بازگشت
+   * توسط Backend تکمیل می‌شوند.
+   */
+  reviewedByUserId?:
+    string | null;
+
+  lastActionReason?:
+    string | null;
 }
 
+
 /*
- * اطلاعات صفحه‌بندی
+ * اطلاعات تکمیلی کارشناس
+ * برای نمایش در Frontend
  */
-export interface PaginationMetadata {
-  totalCount: number;
+export interface ForecastExpert {
+  id:
+    string;
 
-  pageSize: number;
-
-  totalPages: number;
-
-  hasNext: boolean;
-
-  hasPrevious: boolean;
-
-   currentPage: number;
+  fullName?:
+    string;
 }
 
 
-export interface ForecastListResponse {
-  items: ForecastResponse[];
-  pagination: PaginationMetadata;
-}
-
-    
 /*
- * پاسخ Route Handler مرحله نهایی ویزارد
+ * مدل مورد استفاده صفحات Frontend
  *
- * این پاسخ از Route داخلی Next.js برمی‌گردد،
- * نه مستقیماً از Backend.
+ * هسته این مدل همان پاسخ Backend است.
  */
-export interface FinalSubmitResponse {
-  //پیام برای کاربر
-  message: string;
-  //در بک اند ایجاد شد؟؟
-  forecast:ForecastResponse;
-  createSucceeded: boolean;
-  //ارسال برای بررسی
-  submitSucceeded: boolean;
-}
-
-export interface ForecastListFilters {
-  planId?: number;
-
-  status?: ForecastStatus | "";
-
-  fromDate?: string;
-
-  toDate?: string;
-
-  pageNumber: number;
-
-  pageSize: number;
-}
-
-/*
- * بدنه عملیات رد یا
- * بازگشت برای اصلاح
- */
-export interface ForecastReasonRequest {
-  reason: string;
-}
-
-
-export type ForecastExpert = {
-  id: string;
-  fullName?: string;
-};
-
-export type Forecast = {
-  id: string;
-
-  planId: number;
-  networkId: number;
-  networkGroupId:
-    | number
-    | null;
-
-  broadcastDate: string;
-  mainTopic: string;
-  hasExpert: boolean;
-
-  episodeNumber?: number;
-
-  status: ForecastStatus;
-
-  topicAxes?:
-    ForecastTopicAxis[];
-
+export interface Forecast
+  extends ForecastResponse {
+  /*
+   * ممکن است صفحه جزئیات،
+   * اطلاعات کامل کارشناسان را
+   * جداگانه دریافت و اضافه کند.
+   */
   experts?:
     ForecastExpert[];
 
-  expertIds?: string[];
+  /*
+   * نام برنامه از سرویس اطلاعات
+   * پایه و براساس planId تکمیل می‌شود.
+   */
+  programName?:
+    string;
 
-  createdAt?: string;
-  updatedAt?: string;
+  /*
+   * فیلدهای سازگاری موقت با
+   * صفحات قدیمی پروژه.
+   *
+   * بعد از اصلاح صفحه مشاهده و
+   * ویرایش حذف خواهند شد.
+   */
+  createdAt?:
+    string;
 
+  updatedAt?:
+    string;
+
+  /**
+   * @deprecated
+   * از lastActionReason استفاده شود.
+   */
   returnReason?:
-    | string
-    | null;
+    string | null;
 
+  /**
+   * @deprecated
+   * از lastActionReason استفاده شود.
+   */
   rejectionReason?:
-    | string
-    | null;
-};
+    string | null;
+}
 
 
-export type WorkflowReasonRequest = {
-  reason: string;
-};
+/*
+ * اطلاعات صفحه‌بندی داخلی Frontend
+ */
+export interface PaginationMetadata {
+  currentPage:
+    number;
 
-export type ForecastApiError = {
-  message?: string;
-  description?: string;
-  errors?: unknown;
-};
+  totalPages:
+    number;
+
+  pageSize:
+    number;
+
+  totalCount:
+    number;
+
+  hasPrevious:
+    boolean;
+
+  hasNext:
+    boolean;
+}
 
 
+/*
+ * پاسخ یکپارچه Route داخلی
+ * فهرست پیش‌بینی‌ها
+ *
+ * Backend آرایه را در Body و
+ * Pagination را در Header می‌دهد؛
+ * Route داخلی آن‌ها را در این
+ * ساختار یکپارچه می‌کند.
+ */
+export interface ForecastListResponse {
+  items:
+    ForecastResponse[];
+
+  pagination:
+    PaginationMetadata;
+}
+
+
+/*
+ * فیلترهای GET /api/forecasts
+ *
+ * pageNumber و pageSize طبق
+ * مستند Backend اجباری هستند.
+ */
+export interface ForecastListFilters {
+  planId?:
+    number;
+
+  status?:
+    ForecastStatus | "";
+
+  fromDate?:
+    string;
+
+  toDate?:
+    string;
+
+  pageNumber:
+    number;
+
+  pageSize:
+    number;
+}
+
+
+/*
+ * بدنه ویرایش Forecast
+ *
+ * PUT /api/forecasts/{id}
+ */
+export interface UpdateForecastRequest {
+  /*
+   * باید با شناسه موجود
+   * در مسیر برابر باشد.
+   */
+  id:
+    string;
+
+  broadcastDate:
+    string;
+
+  mainTopic:
+    string;
+
+  hasExpert:
+    boolean;
+
+  topicAxes:
+    string[];
+
+  expertIds:
+    string[];
+}
+
+
+/*
+ * بدنه عملیات رد یا بازگشت
+ *
+ * POST /reject
+ * POST /return-for-edit
+ */
+export interface ForecastReasonRequest {
+  reason:
+    string;
+}
+
+
+/*
+ * پاسخ Route داخلی عملیات
+ * submit، approve، reject و return
+ *
+ * Backend ممکن است Forecast یا
+ * پاسخ خالی برگرداند.
+ */
+export interface ForecastActionResponse {
+  message:
+    string;
+
+  forecast?:
+    ForecastResponse;
+}
+
+
+/*
+ * پاسخ Route داخلی مرحله
+ * نهایی Wizard پیش‌بینی
+ */
+export interface FinalSubmitResponse {
+  message:
+    string;
+
+  forecast:
+    ForecastResponse;
+
+  createSucceeded:
+    boolean;
+
+  submitSucceeded:
+    boolean;
+}
+
+
+/*
+ * پاسخ داخلی حذف Forecast
+ */
+export interface DeleteForecastResponse {
+  message:
+    string;
+
+  deletedId:
+    string;
+}
+
+
+/*
+ * مجوز عملیات هر ردیف
+ */
+export interface ForecastRowPermissions {
+  canView:
+    boolean;
+
+  canEdit:
+    boolean;
+
+  canDelete:
+    boolean;
+
+  canSubmit:
+    boolean;
+}
+
+
+/*
+ * مدل عمومی خطاهای API
+ */
+export interface ForecastApiError {
+  type?:
+    string;
+
+  title?:
+    string;
+
+  status?:
+    number;
+
+  detail?:
+    string;
+
+  traceId?:
+    string;
+
+  message?:
+    string;
+
+  description?:
+    string;
+
+  code?:
+    string;
+
+  errors?:
+    unknown;
+}
+
+
+/*
+ * مدل سازگار خطا برای بخش‌هایی
+ * که قبلاً از ApiErrorResponse
+ * استفاده کرده‌اند.
+ */
 export interface ApiErrorResponse {
-  message?: string;
+  type?:
+    string;
 
-  description?: string;
+  title?:
+    string;
 
-  code?: string;
+  status?:
+    number;
+
+  statusCode?:
+    number;
+
+  detail?:
+    string;
+
+  traceId?:
+    string;
+
+  message?:
+    string;
+
+  description?:
+    string;
+
+  code?:
+    string;
 
   errors?:
     | string
@@ -231,56 +458,3 @@ export interface ApiErrorResponse {
         string[]
       >;
 }
-
-
-
-export interface UpdateForecastRequest {
-  id:string;
-
-  broadcastDate: string;
-
-  mainTopic: string;
-
-  hasExpert: boolean;
-
-  topicAxes: string[];
-
-  expertIds: string[];
-}
-
-//پایخ داخلی
-export interface ForecastActionResponse {
-  message: string;
-
-  /*
-   * ممکن است Endpoint Backend
-   * پاسخ خالی داشته باشد.
-   */
-  forecast?: ForecastResponse;
-}
-
-//delete
-export interface DeleteForecastResponse {
-  message: string;
-
-  deletedId: string;
-}
-
-//دلیل رد یا برگشت
-export interface ForecastReasonRequest {
-  reason: string;
-}
-
-//مجوز action  3.
-export interface ForecastRowPermissions {
-  canView: boolean;
-
-  canEdit: boolean;
-
-  canDelete: boolean;
-
-  canSubmit: boolean;
-}
-
-
-

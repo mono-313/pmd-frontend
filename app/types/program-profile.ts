@@ -1,13 +1,11 @@
 /*
- * انواع داده مربوط به
+ * انواع داده‌های مربوط به
  * Wizard صدور شناسنامه برنامه
  */
 
 
 /*
  * نحوه حضور کارشناس
- *
- * مطابق Enum مستند Backend:
  *
  * 1 = حضوری
  * 2 = تلفنی
@@ -22,8 +20,7 @@ export type AttendanceType =
 
 
 /*
- * گزینه قابل نمایش در فیلد
- * آبشاری نحوه حضور
+ * گزینه آبشاری نحوه حضور
  */
 export interface AttendanceTypeOption {
   value:
@@ -35,8 +32,7 @@ export interface AttendanceTypeOption {
 
 
 /*
- * مقادیر ثابت آبشاری
- * نحوه حضور کارشناس
+ * گزینه‌های ثابت نحوه حضور
  */
 export const ATTENDANCE_TYPE_OPTIONS:
   AttendanceTypeOption[] = [
@@ -60,32 +56,40 @@ export const ATTENDANCE_TYPE_OPTIONS:
 
 
 /*
- * اطلاعات مرحله اول:
+ * اطلاعات مرحله اول ویزارد:
  * مشخصات شناسنامه برنامه
  */
 export interface ProfileSpecificationsData {
   /*
-   * اطلاعات مرجع
+   * شناسه پیش‌بینی
    */
   forecastId:
     string;
 
+  /*
+   * شناسه طرح یا برنامه
+   */
   planId:
     number;
 
+  /*
+   * شناسه شبکه
+   */
   networkId:
     number;
 
+  /*
+   * شناسه گروه شبکه
+   *
+   * در بعضی کاربران ممکن است
+   * مقدار وجود نداشته باشد.
+   */
   networkGroupId:
-    number;
+    number | null;
 
 
   /*
-   * اطلاعات فقط نمایشی
-   *
-   * programName و episodeNumber
-   * طبق مستند در درخواست صدور
-   * ارسال نمی‌شوند.
+   * اطلاعات نمایشی
    */
   programName:
     string;
@@ -98,22 +102,30 @@ export interface ProfileSpecificationsData {
 
 
   /*
-   * مشخصات قابل استفاده
-   * در درخواست صدور شناسنامه
+   * مدت برنامه با فرمت:
+   * hh:mm:ss
    */
   duration:
     string;
 
+  /*
+   * تاریخ میلادی ISO
+   * قابل ارسال به Backend
+   */
   broadcastDate:
     string;
 
   /*
-   * فقط برای نمایش و DatePicker
-   * است و به Backend ارسال نمی‌شود.
+   * تاریخ شمسی فقط برای نمایش
+   * و DatePicker
    */
   broadcastDateJalali:
     string;
 
+
+  /*
+   * مشخصات برنامه
+   */
   productionMethod:
     string;
 
@@ -138,16 +150,15 @@ export interface ProfileSpecificationsData {
   programStructureName:
     string;
 
+  /*
+   * ساعت شروع با فرمت:
+   * hh:mm:ss
+   */
   startTime:
     string;
 
-
   /*
-   * طبق مستند، Backend این مقدار
-   * را از Forecast می‌خواند.
-   *
-   * بنابراین در IssueRequest
-   * ارسال نمی‌شود.
+   * آیا برنامه کارشناس دارد؟
    */
   hasExpert:
     boolean;
@@ -155,13 +166,10 @@ export interface ProfileSpecificationsData {
 
 
 /*
- * عامل برنامه
+ * عامل برنامه داخل FormData ویزارد
  *
- * اطلاعات اولیه از:
+ * اطلاعات اولیه معمولاً از:
  * GET /estimateDetail/{planId}
- *
- * و هنگام صدور داخل crewMembers
- * ارسال می‌شود.
  */
 export interface ProfileCrewMemberData {
   personnelId:
@@ -182,27 +190,49 @@ export interface ProfileCrewMemberData {
 
 
 /*
- * آیتم برنامه
+ * آیتم برنامه داخل FormData ویزارد
  *
  * اطلاعات اولیه از:
  * GET /planItems/{planId}
  */
 export interface ProfileItemData {
+  /*
+   * شناسه آیتم منبع
+   */
   itemId:
     number | null;
 
+  /*
+   * عنوان آیتم
+   */
   itemName:
     string;
-  
+
+  /*
+   * موضوع یا توضیحات آیتم
+   */
   itemSubject:
     string;
 
+  /*
+   * شناسه نوع تولید
+   *
+   * ممکن است سرویس اولیه
+   * این مقدار را برنگرداند.
+   */
   productionTypeId:
     number | null;
 
+  /*
+   * عنوان نوع تولید
+   */
   productionType:
     string;
 
+  /*
+   * مدت آیتم با فرمت:
+   * hh:mm:ss
+   */
   duration:
     string;
 }
@@ -210,15 +240,14 @@ export interface ProfileItemData {
 
 /*
  * کارشناس انتخاب‌شده
- * در مرحله چهارم Wizard
+ * در مرحله چهارم ویزارد
  */
 export interface ProfileExpertData {
   expertId:
     string;
 
   /*
-   * این دو فیلد فقط برای نمایش
-   * در جدول و مرحله بازبینی هستند.
+   * اطلاعات نمایشی
    */
   firstName:
     string;
@@ -227,14 +256,11 @@ export interface ProfileExpertData {
     string;
 
   /*
-   * محور موضوعی مرتبط
+   * محور موضوعی
    */
   topicAxisId:
     string;
 
-  /*
-   * عنوان محور فقط برای نمایش
-   */
   topicAxisTitle:
     string;
 
@@ -254,11 +280,11 @@ export interface ProfileExpertData {
 
 
 /*
- * FormData اصلی Wizard شناسنامه
+ * FormData اصلی ویزارد
  *
- * این Object در IssueProfileDialog
- * نگهداری می‌شود تا هنگام جابه‌جایی
- * بین مراحل، اطلاعات از بین نرود.
+ * این داده در IssueProfileDialog
+ * نگهداری می‌شود تا با جابه‌جایی
+ * بین مراحل از بین نرود.
  */
 export interface ProgramProfileWizardData {
   specifications:
@@ -276,9 +302,53 @@ export interface ProgramProfileWizardData {
 
 
 /*
- * بدنه اصلی صدور شناسنامه
+ * مدل عامل قابل ارسال هنگام
+ * صدور شناسنامه
  *
- * مطابق:
+ * این مدل عمداً از مدل FormData
+ * جدا تعریف شده است.
+ */
+export interface IssueProfileCrewMemberRequest {
+  personnelId:
+    number;
+
+  personnelName:
+    string;
+
+  activityTypeId:
+    number;
+
+  activityTypeName:
+    string;
+
+  isPresent:
+    boolean;
+}
+
+
+/*
+ * مدل آیتم قابل ارسال هنگام
+ * صدور شناسنامه
+ *
+ * itemId، itemSubject و
+ * productionTypeId فعلاً در
+ * قرارداد صدور Backend وجود ندارند.
+ */
+export interface IssueProfileItemRequest {
+  itemName:
+    string;
+
+  productionType:
+    string;
+
+  duration:
+    string;
+}
+
+
+/*
+ * بدنه درخواست صدور شناسنامه
+ *
  * POST /api/program-profiles/issue
  */
 export interface IssueProgramProfileRequest {
@@ -292,7 +362,7 @@ export interface IssueProgramProfileRequest {
     number;
 
   networkGroupId:
-    number;
+    number | null;
 
   /*
    * فرمت:
@@ -339,10 +409,10 @@ export interface IssueProgramProfileRequest {
     string;
 
   crewMembers:
-    ProfileCrewMemberData[];
+    IssueProfileCrewMemberRequest[];
 
   items:
-    ProfileItemData[];
+    IssueProfileItemRequest[];
 }
 
 
@@ -351,7 +421,7 @@ export interface IssueProgramProfileRequest {
  *
  * فیلدهای نمایشی firstName،
  * lastName و topicAxisTitle
- * در این مدل وجود ندارند.
+ * ارسال نمی‌شوند.
  */
 export interface ProfileExpertRequest {
   expertId:
@@ -372,10 +442,9 @@ export interface ProfileExpertRequest {
 
 
 /*
- * بدنه ثبت یا جایگزینی
+ * درخواست ثبت یا جایگزینی
  * کارشناسان شناسنامه
  *
- * مطابق:
  * PUT /api/program-profiles/experts
  */
 export interface UpdateProfileExpertsRequest {
@@ -388,8 +457,7 @@ export interface UpdateProfileExpertsRequest {
 
 
 /*
- * عامل ثبت‌شده در پاسخ
- * ProfileResponse
+ * عامل ثبت‌شده در پاسخ شناسنامه
  */
 export interface ProfileCrewMemberResponse {
   personnelId:
@@ -410,12 +478,24 @@ export interface ProfileCrewMemberResponse {
 
 
 /*
- * آیتم ثبت‌شده در پاسخ
- * ProfileResponse
+ * آیتم ثبت‌شده در پاسخ شناسنامه
+ *
+ * بعضی نسخه‌های Backend ممکن است
+ * شناسه یا موضوع آیتم را نیز برگردانند؛
+ * به همین علت اختیاری تعریف شده‌اند.
  */
 export interface ProfileItemResponse {
+  itemId?:
+    number | null;
+
   itemName:
     string;
+
+  itemSubject?:
+    string;
+
+  productionTypeId?:
+    number | null;
 
   productionType:
     string;
@@ -426,11 +506,7 @@ export interface ProfileItemResponse {
 
 
 /*
- * کارشناس ثبت‌شده در پاسخ
- * ProfileResponse
- *
- * Backend طبق مستند نام کارشناس
- * را داخل این مدل برنمی‌گرداند.
+ * کارشناس ثبت‌شده در پاسخ شناسنامه
  */
 export interface ProfileExpertResponse {
   expertId:
@@ -443,8 +519,8 @@ export interface ProfileExpertResponse {
     string;
 
   /*
-   * ممکن است Backend Enum را
-   * رشته یا عدد برگرداند.
+   * Backend ممکن است Enum را
+   * به شکل رشته یا عدد برگرداند.
    */
   attendanceType:
     AttendanceType | string;
@@ -456,8 +532,6 @@ export interface ProfileExpertResponse {
 
 /*
  * پاسخ شناسنامه از Backend
- *
- * مطابق ProfileResponse مستند
  */
 export interface ProgramProfileResponse {
   id:
@@ -473,7 +547,14 @@ export interface ProgramProfileResponse {
     number;
 
   networkGroupId:
-    number;
+    number | null;
+
+  /*
+   * نام برنامه ممکن است در برخی
+   * پاسخ‌ها وجود نداشته باشد.
+   */
+  programName?:
+    string;
 
   mainTopic:
     string;
@@ -535,7 +616,7 @@ export interface ProgramProfileResponse {
 
 
 /*
- * Metadata مربوط به Pagination
+ * اطلاعات صفحه‌بندی
  */
 export interface ProgramProfilePagination {
   currentPage:
@@ -574,8 +655,8 @@ export interface ProgramProfileListResponse {
 /*
  * پاسخ نهایی Route صدور شناسنامه
  *
- * این مدل پاسخ داخلی فرانت است
- * و الزاماً پاسخ مستقیم Backend نیست.
+ * این مدل مربوط به پاسخ یکپارچه
+ * Route داخلی Frontend است.
  */
 export interface IssueProgramProfileResponse {
   message:
