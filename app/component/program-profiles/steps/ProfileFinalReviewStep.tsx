@@ -228,7 +228,9 @@ export default function ProfileFinalReviewStep({
 
         const expertsResponse =
           await fetch(
-            "/api/program-profiles/experts",
+            `/api/program-profiles/${encodeURIComponent(
+            profileId
+          )}/experts`,
             {
               method:
                 "PUT",
@@ -1090,30 +1092,123 @@ export default function ProfileFinalReviewStep({
 /*
  * ساخت Payload صدور شناسنامه
  */
+/*
+ * ساخت Payload صدور شناسنامه
+ */
 function buildIssueRequest(
-  wizardData:
-    ProgramProfileWizardData
+  wizardData: ProgramProfileWizardData
 ): IssueProgramProfileRequest {
   const data =
     wizardData.specifications;
 
-
   if (
     data.floorId === null ||
-    data.programDegreeId ===
-      null ||
-    data.programStructureId ===
-      null
+    data.floorId === undefined ||
+    data.programDegreeId === null ||
+    data.programDegreeId === undefined ||
+    data.programStructureId === null ||
+    data.programStructureId === undefined
   ) {
     throw new Error(
       "اطلاعات طبقه، درجه یا ساختار برنامه کامل نیست."
     );
   }
 
+  const items =
+    wizardData.items.map(
+      (item, index) => {
+        const itemName =
+          getTrimmedString(
+            item.itemName
+          );
+
+        const productionType =
+          getTrimmedString(
+            item.productionType
+          );
+
+        if (!itemName) {
+          throw new Error(
+            `عنوان آیتم ردیف ${toPersianNumber(
+              index + 1
+            )} مشخص نشده است.`
+          );
+        }
+
+        if (!productionType) {
+          throw new Error(
+            `نوع تولید آیتم ردیف ${toPersianNumber(
+              index + 1
+            )} الزامی است.`
+          );
+        }
+
+        return {
+          itemName,
+
+          productionType,
+
+          duration:
+            normalizeDigits(
+              getStringValue(
+                item.duration
+              )
+            ),
+        };
+      }
+    );
+
+  const crewMembers =
+    wizardData.crewMembers.map(
+      (member) => ({
+        personnelId:
+          member.personnelId,
+
+        personnelName:
+          getTrimmedString(
+            member.personnelName
+          ),
+
+        activityTypeId:
+          member.activityTypeId,
+
+        activityTypeName:
+          getTrimmedString(
+            member.activityTypeName
+          ),
+
+        isPresent:
+          member.isPresent,
+      })
+    );
+
+
+
+    if (
+  data.programType !== 10 &&
+  data.programType !== 20
+) {
+  throw new Error(
+    "نوع برنامه معتبر نیست."
+  );
+}
+
+
+const programTypeName =
+  getTrimmedString(
+    data.programTypeName
+  ) ||
+  (
+    data.programType === 10
+      ? "زنده"
+      : "ضبطی یا تولیدی"
+  );
 
   return {
     forecastId:
-      data.forecastId,
+      getTrimmedString(
+        data.forecastId
+      ),
 
     planId:
       data.planId,
@@ -1126,87 +1221,94 @@ function buildIssueRequest(
 
     duration:
       normalizeDigits(
-        data.duration
+        getStringValue(
+          data.duration
+        )
       ),
 
     broadcastDate:
       normalizeDigits(
-        data.broadcastDate
+        getStringValue(
+          data.broadcastDate
+        )
       ),
 
     productionMethod:
-      data.productionMethod
-        .trim(),
+      getTrimmedString(
+        data.productionMethod
+      ),
 
-    occasion:
-      data.occasion.trim(),
+        programType:
+          data.programType,
+
+        programTypeName,
+
+        occasion:
+      getTrimmedString(
+        data.occasion
+      ),
 
     floorId:
       data.floorId,
 
     floorName:
-      data.floorName.trim(),
+      getTrimmedString(
+        data.floorName
+      ),
 
     programDegreeId:
       data.programDegreeId,
 
     programDegreeName:
-      data.programDegreeName
-        .trim(),
+      getTrimmedString(
+        data.programDegreeName
+      ),
 
     programStructureId:
       data.programStructureId,
 
     programStructureName:
-      data.programStructureName
-        .trim(),
+      getTrimmedString(
+        data.programStructureName
+      ),
 
     startTime:
       normalizeDigits(
-        data.startTime
+        getStringValue(
+          data.startTime
+        )
       ),
 
-    crewMembers:
-      wizardData.crewMembers.map(
-        (member) => ({
-          personnelId:
-            member.personnelId,
+    crewMembers,
 
-          personnelName:
-            member.personnelName
-              .trim(),
-
-          activityTypeId:
-            member.activityTypeId,
-
-          activityTypeName:
-            member.activityTypeName
-              .trim(),
-
-          isPresent:
-            member.isPresent,
-        })
-      ),
-
-    items:
-      wizardData.items.map(
-        (item) => ({
-          itemName:
-            item.itemName.trim(),
-
-          productionType:
-            item.productionType
-              .trim(),
-
-          duration:
-            normalizeDigits(
-              item.duration
-            ),
-        })
-      ),
+    items,
   };
 }
 
+
+/*
+ * جلوگیری از اجرای trim روی
+ * مقدار null یا undefined
+ */
+function getTrimmedString(
+  value: unknown
+): string {
+  return typeof value === "string"
+    ? value.trim()
+    : "";
+}
+
+
+/*
+ * تبدیل مقدار ناشناخته به رشته
+ */
+function getStringValue(
+  value: unknown
+): string {
+  return typeof value === "string"
+    ? value
+    : "";
+}
 
 /*
  * استخراج شناسه شناسنامه

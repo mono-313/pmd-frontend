@@ -1,12 +1,27 @@
+/*
+ * نقش‌های شناخته‌شده سامانه
+ */
 export const APP_ROLES = {
   ADMIN:
     "Admin",
+
+  NETWORK_MANAGER:
+    "NetworkManager",
 
   NETWORK_GROUP_MANAGER:
     "NetworkGroupManager",
 
   PROVIDERS:
     "Providers",
+
+  SUPERVISOR:
+    "Supervisor",
+
+  LIVE_SUPERVISOR:
+    "LiveSupervisor",
+
+  BROADCAST_MANAGER:
+    "BroadcastManager",
 
   PLAN_MANAGER:
     "PlanManager",
@@ -19,6 +34,9 @@ export type AppRole =
   ];
 
 
+/*
+ * مجوزهای قابل استفاده در Frontend
+ */
 export const PERMISSIONS = {
   /*
    * پیش‌بینی
@@ -57,13 +75,13 @@ export const PERMISSIONS = {
     "forecast.returnForEdit",
 
   /*
-   * موضوعات تأییدشده
+   * پیش‌بینی‌های تأییدشده
    */
   APPROVED_FORECAST_VIEW:
     "approvedForecast.view",
 
   /*
-   * شناسنامه
+   * شناسنامه برنامه
    */
   PROFILE_VIEW:
     "profile.view",
@@ -73,6 +91,33 @@ export const PERMISSIONS = {
 
   PROFILE_EDIT:
     "profile.edit",
+
+  PROFILE_SUBMIT:
+    "profile.submit",
+
+  /*
+   * کارتابل گردش‌کار شناسنامه
+   */
+  PROFILE_REVIEW_LIST:
+    "profile.review.list",
+
+  PROFILE_REVIEW_DETAILS:
+    "profile.review.details",
+
+  PROFILE_APPROVE:
+    "profile.approve",
+
+  PROFILE_RETURN:
+    "profile.return",
+
+  /*
+   * نظرات ناظر
+   */
+  PROFILE_SUPERVISOR_COMMENT_VIEW:
+    "profile.supervisorComment.view",
+
+  PROFILE_SUPERVISOR_COMMENT_CREATE:
+    "profile.supervisorComment.create",
 
   /*
    * مدیریت سامانه

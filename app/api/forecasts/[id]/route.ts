@@ -11,8 +11,8 @@ import {
   API_ENDPOINTS,
 } from "@/app/lib/api-config";
 
-
 import type {
+  ForecastStatus,
   UpdateForecastRequest,
 } from "@/app/types/forecast";
 
@@ -27,7 +27,7 @@ interface RouteContext {
 /*
  * GET /api/forecasts/{id}
  *
- * دریافت اطلاعات یک Forecast
+ * دریافت اطلاعات یک پیش‌بینی
  */
 export async function GET(
   _request: Request,
@@ -35,62 +35,43 @@ export async function GET(
 ) {
   try {
     const {
-      id,
+      id: rawId,
     } = await context.params;
 
     const forecastId =
-      id?.trim();
+      rawId?.trim();
 
     if (!forecastId) {
-      return NextResponse.json(
-        {
-          message:
-            "شناسه پیش‌بینی معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "شناسه پیش‌بینی معتبر نیست.",
+        400
       );
     }
 
-    /*
-     * دریافت Access Token
-     */
-    const cookieStore =
-      await cookies();
 
     const accessToken =
-      cookieStore.get(
-        "access-token"
-      )?.value;
+      await getAccessToken();
 
     if (!accessToken) {
-      return NextResponse.json(
-        {
-          message:
-            "نشست کاربری معتبر نیست.",
-        },
-        {
-          status: 401,
-        }
+      return jsonError(
+        "نشست کاربری معتبر نیست.",
+        401
       );
     }
 
-    /*
-     * ساخت آدرس Backend:
-     * /api/forecasts/{id}
-     */
+
     const backendUrl =
-      `${API_CONFIG.baseUrl}` +
-      `${API_ENDPOINTS.forecasts.byId(
+      buildForecastUrl(
         forecastId
-      )}`;
+      );
+
 
     const backendResponse =
       await fetch(
         backendUrl,
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             Accept:
@@ -105,9 +86,7 @@ export async function GET(
         }
       );
 
-    /*
-     * پاسخ ابتدا به شکل Text خوانده می‌شود.
-     */
+
     const responseText =
       await backendResponse.text();
 
@@ -116,11 +95,11 @@ export async function GET(
         responseText
       );
 
+
     console.log(
       "GET FORECAST BY ID:",
       {
-        id:
-          forecastId,
+        forecastId,
 
         backendUrl,
 
@@ -133,9 +112,7 @@ export async function GET(
       }
     );
 
-    /*
-     * پاسخ ناموفق Backend
-     */
+
     if (!backendResponse.ok) {
       return NextResponse.json(
         {
@@ -143,13 +120,17 @@ export async function GET(
             getErrorMessage(
               responseData
             ) ??
-            `دریافت اطلاعات پیش‌بینی انجام نشد. کد پاسخ Backend: ${backendResponse.status}`,
+            (
+              "دریافت اطلاعات پیش‌بینی انجام نشد. " +
+              `کد پاسخ Backend: ${backendResponse.status}`
+            ),
 
-          /*
-           * پاسخ اصلی فقط برای عیب‌یابی
-           */
           details:
-            responseData,
+            responseData ??
+            responseText.slice(
+              0,
+              1000
+            ),
         },
         {
           status:
@@ -158,34 +139,25 @@ export async function GET(
       );
     }
 
-    /*
-     * پاسخ موفق اما خالی
-     */
+
     if (!responseText.trim()) {
-      return NextResponse.json(
-        {
-          message:
-            "Backend برای این پیش‌بینی پاسخ خالی برگرداند.",
-        },
-        {
-          status: 502,
-        }
+      return jsonError(
+        "اطلاعات پیش‌بینی در پاسخ Backend وجود ندارد.",
+        502
       );
     }
 
-    /*
-     * پاسخ موفق اما غیر JSON
-     */
+
     if (responseData === null) {
       return NextResponse.json(
         {
           message:
-            "پاسخ Backend از نوع JSON نیست.",
+            "پاسخ Backend از نوع JSON معتبر نیست.",
 
           details:
             responseText.slice(
               0,
-              500
+              1000
             ),
         },
         {
@@ -194,12 +166,47 @@ export async function GET(
       );
     }
 
+
+    const source =
+      extractForecastObject(
+        responseData
+      );
+
+
+    if (!source) {
+      console.error(
+        "Forecast object was not found:",
+        responseData
+      );
+
+      return NextResponse.json(
+        {
+          message:
+            "اطلاعات پیش‌بینی در پاسخ Backend پیدا نشد.",
+
+          details:
+            responseData,
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+
     /*
-     * پاسخ موفق Backend بدون هیچ
-     * اعتبارسنجی سخت‌گیرانه منتقل می‌شود.
+     * تطبیق پاسخ واقعی Backend
+     * با مدل مورد استفاده Frontend
      */
+    const forecast =
+      normalizeForecast(
+        source,
+        forecastId
+      );
+
+
     return NextResponse.json(
-      responseData,
+      forecast,
       {
         status: 200,
       }
@@ -210,16 +217,9 @@ export async function GET(
       error
     );
 
-    return NextResponse.json(
-      {
-        message:
-          error instanceof Error
-            ? error.message
-            : "ارتباط با وب‌سرویس پیش‌بینی برقرار نشد.",
-      },
-      {
-        status: 500,
-      }
+    return jsonError(
+      "ارتباط با وب‌سرویس دریافت پیش‌بینی برقرار نشد.",
+      500
     );
   }
 }
@@ -228,153 +228,87 @@ export async function GET(
 /*
  * PUT /api/forecasts/{id}
  *
- * ویرایش Forecast
+ * ویرایش پیش‌بینی
  */
 export async function PUT(
   request: Request,
   context: RouteContext
 ) {
   try {
-    /*
-     * شناسه Forecast از URL
-     */
     const {
-      id,
+      id: rawId,
     } = await context.params;
 
     const forecastId =
-      id?.trim();
+      rawId?.trim();
 
     if (!forecastId) {
-      return NextResponse.json(
-        {
-          message:
-            "شناسه پیش‌بینی معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "شناسه پیش‌بینی معتبر نیست.",
+        400
       );
     }
 
-    /*
-     * دریافت Access Token
-     */
-    const cookieStore =
-      await cookies();
 
     const accessToken =
-      cookieStore.get(
-        "access-token"
-      )?.value;
+      await getAccessToken();
 
     if (!accessToken) {
-      return NextResponse.json(
-        {
-          message:
-            "نشست کاربری معتبر نیست.",
-        },
-        {
-          status: 401,
-        }
+      return jsonError(
+        "نشست کاربری معتبر نیست.",
+        401
       );
     }
 
-    /*
-     * دریافت بدنه ارسالی از
-     * EditFinalReviewStep
-     */
+
     const requestData =
       await request.json() as
         unknown;
 
+
     if (!isRecord(requestData)) {
-      return NextResponse.json(
-        {
-          message:
-            "ساختار اطلاعات ویرایش معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "ساختار اطلاعات ویرایش معتبر نیست.",
+        400
       );
     }
+
 
     const broadcastDate =
-      typeof requestData
-        .broadcastDate ===
-        "string"
-        ? normalizeDigits(
-            requestData
-              .broadcastDate
-              .trim()
-          )
-        : "";
+      normalizeDigits(
+        readString(
+          requestData.broadcastDate
+        )
+      );
 
     const mainTopic =
-      typeof requestData
-        .mainTopic ===
-        "string"
-        ? requestData
-            .mainTopic
-            .trim()
-        : "";
+      readString(
+        requestData.mainTopic
+      );
 
     const hasExpert =
-      requestData.hasExpert;
+      readBoolean(
+        requestData.hasExpert
+      );
 
     const topicAxes =
-      Array.isArray(
+      readStringArray(
         requestData.topicAxes
-      )
-        ? requestData.topicAxes
-            .filter(
-              (
-                topic
-              ): topic is string =>
-                typeof topic ===
-                  "string"
-            )
-            .map(
-              (topic) =>
-                topic.trim()
-            )
-            .filter(Boolean)
-        : [];
+      );
 
     const expertIds =
-      Array.isArray(
+      readStringArray(
         requestData.expertIds
-      )
-        ? requestData.expertIds
-            .filter(
-              (
-                expertId
-              ): expertId is string =>
-                typeof expertId ===
-                  "string"
-            )
-            .map(
-              (expertId) =>
-                expertId.trim()
-            )
-            .filter(Boolean)
-        : [];
+      );
 
-    /*
-     * اعتبارسنجی فیلدهای ضروری
-     */
+
     if (!broadcastDate) {
-      return NextResponse.json(
-        {
-          message:
-            "تاریخ پخش الزامی است.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "تاریخ پخش الزامی است.",
+        400
       );
     }
+
 
     if (
       Number.isNaN(
@@ -383,76 +317,60 @@ export async function PUT(
         )
       )
     ) {
-      return NextResponse.json(
-        {
-          message:
-            "فرمت تاریخ پخش معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "فرمت تاریخ پخش معتبر نیست.",
+        400
       );
     }
+
 
     if (!mainTopic) {
-      return NextResponse.json(
-        {
-          message:
-            "موضوع اصلی الزامی است.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "موضوع اصلی الزامی است.",
+        400
       );
     }
+
 
     if (
-      typeof hasExpert !==
+      typeof requestData.hasExpert !==
         "boolean"
     ) {
-      return NextResponse.json(
-        {
-          message:
-            "وضعیت کارشناس معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "وضعیت کارشناس معتبر نیست.",
+        400
       );
     }
 
+
     if (topicAxes.length === 0) {
-      return NextResponse.json(
-        {
-          message:
-            "حداقل یک محور موضوعی الزامی است.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "حداقل یک محور موضوعی الزامی است.",
+        400
       );
     }
+
 
     if (
       hasExpert &&
       expertIds.length === 0
     ) {
-      return NextResponse.json(
-        {
-          message:
-            "برای برنامه دارای کارشناس، حداقل یک کارشناس انتخاب کنید.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "برای برنامه دارای کارشناس، حداقل یک کارشناس انتخاب کنید.",
+        400
       );
     }
 
+
     /*
-     * بدنه دقیق مطابق مستند Backend
+     * مطابق مستند جدید:
      *
-     * planId، networkId، networkGroupId
-     * و episodeNumber ارسال نمی‌شوند.
+     * planId
+     * networkId
+     * networkGroupId
+     * episodeNumber
+     *
+     * در Update ارسال نمی‌شوند.
      */
     const backendBody:
       UpdateForecastRequest = {
@@ -473,11 +391,12 @@ export async function PUT(
           : [],
     };
 
+
     const backendUrl =
-      `${API_CONFIG.baseUrl}` +
-      `${API_ENDPOINTS.forecasts.byId(
+      buildForecastUrl(
         forecastId
-      )}`;
+      );
+
 
     console.log(
       "UPDATE FORECAST REQUEST:",
@@ -487,14 +406,13 @@ export async function PUT(
       }
     );
 
-    /*
-     * ارسال PUT به Backend
-     */
+
     const backendResponse =
       await fetch(
         backendUrl,
         {
-          method: "PUT",
+          method:
+            "PUT",
 
           headers: {
             Accept:
@@ -517,6 +435,7 @@ export async function PUT(
         }
       );
 
+
     const responseText =
       await backendResponse.text();
 
@@ -524,6 +443,7 @@ export async function PUT(
       parseJsonResponse(
         responseText
       );
+
 
     console.log(
       "UPDATE FORECAST RESPONSE:",
@@ -537,9 +457,7 @@ export async function PUT(
       }
     );
 
-    /*
-     * پاسخ ناموفق Backend
-     */
+
     if (!backendResponse.ok) {
       return NextResponse.json(
         {
@@ -547,10 +465,17 @@ export async function PUT(
             getErrorMessage(
               responseData
             ) ??
-              `ویرایش پیش‌بینی انجام نشد. کد پاسخ Backend: ${backendResponse.status}`,
+            (
+              "ویرایش پیش‌بینی انجام نشد. " +
+              `کد پاسخ Backend: ${backendResponse.status}`
+            ),
 
           details:
-            responseData,
+            responseData ??
+            responseText.slice(
+              0,
+              1000
+            ),
         },
         {
           status:
@@ -559,18 +484,46 @@ export async function PUT(
       );
     }
 
+
     /*
-     * در پاسخ موفق سخت‌گیری نمی‌کنیم.
-     * ممکن است Backend پاسخ کامل،
-     * ناقص یا حتی خالی برگرداند.
+     * PUT ممکن است پاسخ خالی داشته باشد.
      */
+    if (
+      responseData === null
+    ) {
+      return NextResponse.json(
+        {
+          message:
+            "ویرایش پیش‌بینی با موفقیت انجام شد.",
+
+          forecast:
+            null,
+        },
+        {
+          status: 200,
+        }
+      );
+    }
+
+
+    const source =
+      extractForecastObject(
+        responseData
+      );
+
+
     return NextResponse.json(
       {
         message:
           "ویرایش پیش‌بینی با موفقیت انجام شد.",
 
         forecast:
-          responseData,
+          source
+            ? normalizeForecast(
+                source,
+                forecastId
+              )
+            : responseData,
       },
       {
         status: 200,
@@ -582,86 +535,74 @@ export async function PUT(
       error
     );
 
+
     if (
       error instanceof
         SyntaxError
     ) {
-      return NextResponse.json(
-        {
-          message:
-            "بدنه درخواست JSON معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+      return jsonError(
+        "بدنه درخواست JSON معتبر نیست.",
+        400
       );
     }
 
-    return NextResponse.json(
-      {
-        message:
-          error instanceof Error
-            ? error.message
-            : "ارتباط با وب‌سرویس ویرایش برقرار نشد.",
-      },
-      {
-        status: 500,
-      }
+
+    return jsonError(
+      "ارتباط با وب‌سرویس ویرایش پیش‌بینی برقرار نشد.",
+      500
     );
   }
 }
 
 
-
+/*
+ * DELETE /api/forecasts/{id}
+ *
+ * حذف نرم پیش‌بینی
+ */
 export async function DELETE(
   _request: Request,
   context: RouteContext
 ) {
   try {
-    const { id } =
-      await context.params;
+    const {
+      id: rawId,
+    } = await context.params;
 
-    if (!id?.trim()) {
-      return NextResponse.json(
-        {
-          message:
-            "شناسه پیش‌بینی معتبر نیست.",
-        },
-        {
-          status: 400,
-        }
+    const forecastId =
+      rawId?.trim();
+
+    if (!forecastId) {
+      return jsonError(
+        "شناسه پیش‌بینی معتبر نیست.",
+        400
       );
     }
 
-    const cookieStore =
-      await cookies();
 
     const accessToken =
-      cookieStore.get(
-        "access-token"
-      )?.value;
+      await getAccessToken();
 
     if (!accessToken) {
-      return NextResponse.json(
-        {
-          message:
-            "نشست کاربری معتبر نیست.",
-        },
-        {
-          status: 401,
-        }
+      return jsonError(
+        "نشست کاربری معتبر نیست.",
+        401
       );
     }
 
+
     const backendUrl =
-      `${API_CONFIG.baseUrl}` +
-      `${API_ENDPOINTS.forecasts.byId(id)}`;
+      buildForecastUrl(
+        forecastId
+      );
+
 
     const backendResponse =
       await fetch(
         backendUrl,
         {
-          method: "DELETE",
+          method:
+            "DELETE",
 
           headers: {
             Accept:
@@ -676,9 +617,7 @@ export async function DELETE(
         }
       );
 
-    /*
-     * DELETE ممکن است پاسخ خالی با کد 204 برگرداند.
-     */
+
     const responseText =
       await backendResponse.text();
 
@@ -687,21 +626,25 @@ export async function DELETE(
         responseText
       );
 
-    if (!backendResponse.ok) {
-      const fallbackMessage =
-        "حذف پیش‌بینی انجام نشد. کد پاسخ Backend: " +
-        backendResponse.status;
 
+    if (!backendResponse.ok) {
       return NextResponse.json(
         {
           message:
             getErrorMessage(
               responseData
             ) ??
-            fallbackMessage,
+            (
+              "حذف پیش‌بینی انجام نشد. " +
+              `کد پاسخ Backend: ${backendResponse.status}`
+            ),
 
           details:
-            responseData,
+            responseData ??
+            responseText.slice(
+              0,
+              1000
+            ),
         },
         {
           status:
@@ -710,10 +653,14 @@ export async function DELETE(
       );
     }
 
+
     return NextResponse.json(
       {
         message:
           "پیش‌بینی با موفقیت حذف شد.",
+
+        deletedId:
+          forecastId,
       },
       {
         status: 200,
@@ -725,21 +672,558 @@ export async function DELETE(
       error
     );
 
-    return NextResponse.json(
-      {
-        message:
-          "ارتباط با وب‌سرویس حذف پیش‌بینی برقرار نشد.",
-      },
-      {
-        status: 500,
-      }
+    return jsonError(
+      "ارتباط با وب‌سرویس حذف پیش‌بینی برقرار نشد.",
+      500
     );
   }
 }
 
+
 /*
- * تبدیل امن Text به JSON
+ * استخراج Forecast از پاسخ مستقیم یا
+ * ساختارهای Wrapperدار
  */
+function extractForecastObject(
+  value: unknown,
+  depth = 0
+): Record<
+  string,
+  unknown
+> | null {
+  if (
+    depth > 6 ||
+    !isRecord(value)
+  ) {
+    return null;
+  }
+
+
+  /*
+   * پاسخ مستقیم Backend
+   */
+  if (
+    "id" in value ||
+    "planId" in value ||
+    "mainTopic" in value
+  ) {
+    return value;
+  }
+
+
+  const wrapperNames = [
+    "forecast",
+    "Forecast",
+    "data",
+    "Data",
+    "result",
+    "Result",
+    "value",
+    "Value",
+    "item",
+    "Item",
+  ];
+
+
+  for (
+    const wrapperName of
+    wrapperNames
+  ) {
+    const result =
+      extractForecastObject(
+        value[wrapperName],
+        depth + 1
+      );
+
+    if (result) {
+      return result;
+    }
+  }
+
+
+  return null;
+}
+
+
+/*
+ * تبدیل پاسخ Backend به مدل یکپارچه Frontend
+ */
+function normalizeForecast(
+  source: Record<
+    string,
+    unknown
+  >,
+  fallbackId: string
+) {
+  return {
+    id:
+      readIdentifier(
+        source.id
+      ) ||
+      fallbackId,
+
+    planId:
+      readNumber(
+        source.planId
+      ) ?? 0,
+
+    networkId:
+      readNumber(
+        source.networkId
+      ) ?? 0,
+
+    networkGroupId:
+      readNumber(
+        source.networkGroupId
+      ),
+
+    episodeNumber:
+      readNumber(
+        source.episodeNumber
+      ),
+
+    broadcastDate:
+      readString(
+        source.broadcastDate
+      ),
+
+    mainTopic:
+      readString(
+        source.mainTopic
+      ),
+
+    hasExpert:
+      readBoolean(
+        source.hasExpert
+      ),
+
+    /*
+     * Backend فعلی status را
+     * به‌صورت عدد برمی‌گرداند.
+     */
+    status:
+      normalizeForecastStatus(
+        source.status
+      ),
+
+    topicAxes:
+      normalizeTopicAxes(
+        source.topicAxes
+      ),
+
+    expertIds:
+      normalizeExpertIds(
+        source
+      ),
+
+    /*
+     * پشتیبانی از نام‌های قدیم و جدید
+     */
+    createdByUserId:
+      readString(
+        source.createdByUserId
+      ) ||
+      readString(
+        source.userCreatorId
+      ),
+
+    createdByUserName:
+      readString(
+        source.createdByUserName
+      ) ||
+      readString(
+        source.userCreatorName
+      ),
+
+    createdDate:
+      readString(
+        source.createdDate
+      ),
+
+    lastModifiedDate:
+      readString(
+        source.lastModifiedDate
+      ) ||
+      null,
+
+    reviewedByUserId:
+      readString(
+        source.reviewedByUserId
+      ) ||
+      null,
+
+    lastActionReason:
+      readString(
+        source.lastActionReason
+      ) ||
+      readString(
+        source.returnReason
+      ) ||
+      readString(
+        source.rejectionReason
+      ) ||
+      null,
+  };
+}
+
+
+function normalizeForecastStatus(
+  value: unknown
+): ForecastStatus {
+  const normalizedValue =
+    String(
+      value ?? ""
+    ).trim();
+
+
+  const statusMap:
+    Record<
+      string,
+      ForecastStatus
+    > = {
+    "1":
+      "Draft",
+
+    Draft:
+      "Draft",
+
+    "2":
+      "PendingReview",
+
+    PendingReview:
+      "PendingReview",
+
+    "3":
+      "Approved",
+
+    Approved:
+      "Approved",
+
+    "4":
+      "Rejected",
+
+    Rejected:
+      "Rejected",
+
+    "5":
+      "ReturnedForEdit",
+
+    ReturnedForEdit:
+      "ReturnedForEdit",
+  };
+
+
+  return (
+    statusMap[
+      normalizedValue
+    ] ??
+    "Draft"
+  );
+}
+
+
+function normalizeTopicAxes(
+  value: unknown
+): Array<{
+  id: string;
+  title: string;
+  displayOrder: number;
+}> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+
+  return value
+    .map(
+      (
+        item,
+        index
+      ) => {
+        if (
+          typeof item ===
+            "string"
+        ) {
+          const title =
+            item.trim();
+
+          return title
+            ? {
+                id:
+                  `topic-${index}`,
+
+                title,
+
+                displayOrder:
+                  index + 1,
+              }
+            : null;
+        }
+
+
+        if (!isRecord(item)) {
+          return null;
+        }
+
+
+        const title =
+          readString(
+            item.title
+          ) ||
+          readString(
+            item.name
+          );
+
+
+        if (!title) {
+          return null;
+        }
+
+
+        return {
+          id:
+            readIdentifier(
+              item.id
+            ) ||
+            `topic-${index}`,
+
+          title,
+
+          displayOrder:
+            readNumber(
+              item.displayOrder
+            ) ??
+            index + 1,
+        };
+      }
+    )
+    .filter(
+      (
+        item
+      ): item is {
+        id: string;
+        title: string;
+        displayOrder: number;
+      } =>
+        item !== null
+    );
+}
+
+
+function normalizeExpertIds(
+  source: Record<
+    string,
+    unknown
+  >
+): string[] {
+  if (
+    Array.isArray(
+      source.expertIds
+    )
+  ) {
+    return source.expertIds
+      .map(
+        readIdentifier
+      )
+      .filter(Boolean);
+  }
+
+
+  /*
+   * پشتیبانی از حالت experts
+   */
+  if (
+    Array.isArray(
+      source.experts
+    )
+  ) {
+    return source.experts
+      .map(
+        (
+          expert
+        ) => {
+          if (!isRecord(expert)) {
+            return "";
+          }
+
+          return (
+            readIdentifier(
+              expert.expertId
+            ) ||
+            readIdentifier(
+              expert.id
+            )
+          );
+        }
+      )
+      .filter(Boolean);
+  }
+
+
+  return [];
+}
+
+
+/*
+ * ساخت آدرس Backend
+ */
+function buildForecastUrl(
+  forecastId: string
+): string {
+  const baseUrl =
+    API_CONFIG.baseUrl.replace(
+      /\/+$/,
+      ""
+    );
+
+  const endpoint =
+    API_ENDPOINTS.forecasts
+      .byId(
+        encodeURIComponent(
+          forecastId
+        )
+      )
+      .replace(
+        /^\/+/,
+        ""
+      );
+
+  return `${baseUrl}/${endpoint}`;
+}
+
+
+/*
+ * دریافت Token از Cookie
+ */
+async function getAccessToken():
+Promise<string | undefined> {
+  return (
+    await cookies()
+  ).get(
+    "access-token"
+  )?.value;
+}
+
+
+function readStringArray(
+  value: unknown
+): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(
+      (
+        item
+      ): item is string =>
+        typeof item ===
+          "string"
+    )
+    .map(
+      (item) =>
+        item.trim()
+    )
+    .filter(Boolean);
+}
+
+
+function readString(
+  value: unknown
+): string {
+  return typeof value ===
+    "string"
+    ? value.trim()
+    : "";
+}
+
+
+function readIdentifier(
+  value: unknown
+): string {
+  if (
+    typeof value ===
+      "string"
+  ) {
+    return value.trim();
+  }
+
+  if (
+    typeof value ===
+      "number" &&
+    Number.isFinite(value)
+  ) {
+    return String(value);
+  }
+
+  return "";
+}
+
+
+function readNumber(
+  value: unknown
+): number | null {
+  if (
+    typeof value ===
+      "number" &&
+    Number.isFinite(value)
+  ) {
+    return value;
+  }
+
+
+  if (
+    typeof value ===
+      "string" &&
+    value.trim()
+  ) {
+    const parsedValue =
+      Number(
+        normalizeDigits(
+          value
+        )
+      );
+
+    return Number.isFinite(
+      parsedValue
+    )
+      ? parsedValue
+      : null;
+  }
+
+
+  return null;
+}
+
+
+function readBoolean(
+  value: unknown
+): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True"
+  );
+}
+
+
+function isRecord(
+  value: unknown
+): value is Record<
+  string,
+  unknown
+> {
+  return (
+    typeof value ===
+      "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+
 function parseJsonResponse(
   responseText: string
 ): unknown | null {
@@ -757,9 +1241,6 @@ function parseJsonResponse(
 }
 
 
-/*
- * استخراج پیام خطا
- */
 function getErrorMessage(
   value: unknown
 ): string | null {
@@ -767,51 +1248,55 @@ function getErrorMessage(
     return null;
   }
 
-  if (
-    typeof value.message ===
-      "string"
-  ) {
-    return value.message;
+
+  const message =
+    readString(
+      value.message
+    ) ||
+    readString(
+      value.description
+    ) ||
+    readString(
+      value.detail
+    ) ||
+    readString(
+      value.title
+    );
+
+
+  if (message) {
+    return message;
   }
 
-  if (
-    typeof value.description ===
-      "string"
-  ) {
-    return value.description;
-  }
 
   if (
     typeof value.errors ===
-      "string"
+      "string" &&
+    value.errors.trim()
   ) {
-    return value.errors;
+    return value.errors.trim();
   }
 
+
   if (
-    typeof value.title ===
-      "string"
+    isRecord(
+      value.details
+    )
   ) {
-    return value.title;
+    return (
+      readString(
+        value.details.message
+      ) ||
+      readString(
+        value.details.detail
+      ) ||
+      null
+    );
   }
+
 
   return null;
 }
-
-
-function isRecord(
-  value: unknown
-): value is Record<
-  string,
-  unknown
-> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
-}
-
 
 
 function normalizeDigits(
@@ -823,10 +1308,13 @@ function normalizeDigits(
   const arabicDigits =
     "٠١٢٣٤٥٦٧٨٩";
 
+
   return value
     .replace(
       /[۰-۹]/g,
-      (digit) =>
+      (
+        digit
+      ) =>
         String(
           persianDigits.indexOf(
             digit
@@ -835,11 +1323,28 @@ function normalizeDigits(
     )
     .replace(
       /[٠-٩]/g,
-      (digit) =>
+      (
+        digit
+      ) =>
         String(
           arabicDigits.indexOf(
             digit
           )
         )
     );
+}
+
+
+function jsonError(
+  message: string,
+  status: number
+) {
+  return NextResponse.json(
+    {
+      message,
+    },
+    {
+      status,
+    }
+  );
 }

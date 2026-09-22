@@ -41,7 +41,9 @@ import type {
 import type {
   ProfileCrewMemberData,
   ProfileItemData,
+  ProfileExpertData,
   ProgramProfileWizardData,
+  ProgramType,
 } from "@/app/types/program-profile";
 
 
@@ -95,6 +97,10 @@ const emptyWizardData:
     broadcastDateJalali: "",
 
     productionMethod: "",
+
+    programType: 10,
+
+    programTypeName: "",
 
     occasion: "",
 
@@ -715,6 +721,27 @@ if (
           );
 
 
+          const initialExperts =
+            buildInitialProfileExperts(
+              forecast,
+              normalizedExperts,
+              normalizedAxes
+            );
+            console.log("FORECAST EXPERT DATA:", {
+                hasExpert:
+                  forecast.hasExpert ??
+                  forecast.HasExpert,
+
+                expertIds:
+                  forecast.expertIds ??
+                  forecast.ExpertIds,
+
+                normalizedExperts,
+                normalizedAxes,
+                initialExperts,
+              });
+
+
         const broadcastDate =
           getString(
             forecast,
@@ -766,6 +793,83 @@ const resolvedFloorName =
       : ""
   );
 
+  const rawProgramTypeName =
+  getString(
+    planDetail,
+    [
+      "ProgramTypeName",
+      "programTypeName",
+
+      "ProductionTypeName",
+      "productionTypeName",
+
+      "ProductionMethod",
+      "productionMethod",
+    ]
+  ) ||
+  getString(
+    forecast,
+    [
+      "ProgramTypeName",
+      "programTypeName",
+
+      "ProductionTypeName",
+      "productionTypeName",
+
+      "ProductionMethod",
+      "productionMethod",
+    ]
+  );
+
+
+const rawProgramTypeValue =
+  getNumber(
+    planDetail,
+    [
+      "ProgramTypeId",
+      "programTypeId",
+
+      "ProgramType",
+      "programType",
+
+      "ProductionTypeId",
+      "productionTypeId",
+    ]
+  ) ??
+  getNumber(
+    forecast,
+    [
+      "ProgramTypeId",
+      "programTypeId",
+
+      "ProgramType",
+      "programType",
+
+      "ProductionTypeId",
+      "productionTypeId",
+    ]
+  );
+
+
+const resolvedProgramType =
+  resolveProgramType(
+    rawProgramTypeValue,
+    rawProgramTypeName
+  );
+
+
+if (resolvedProgramType === null) {
+  throw new Error(
+    "نوع برنامه در اطلاعات دریافتی مشخص نشده است."
+  );
+}
+
+
+const resolvedProgramTypeName =
+  rawProgramTypeName ||
+  getProgramTypeTitle(
+    resolvedProgramType
+  );
   
         /*
          * ساخت FormData مرکزی
@@ -845,19 +949,14 @@ const resolvedFloorName =
       ),
 
     productionMethod:
-      getString(
-        planDetail,
-        [
-      "ProgramTypeName",
-      "programTypeName",
+  resolvedProgramTypeName,
 
-      "ProductionMethod",
-      "productionMethod",
+programType:
+  resolvedProgramType,
 
-      "ProductionTypeName",
-      "productionTypeName",
-    ]
-      ),
+programTypeName:
+  resolvedProgramTypeName,
+
 
     occasion:
   getString(
@@ -918,7 +1017,7 @@ programStructureName:
   items:
     normalizedItems,
 
-  experts: [],
+  experts: initialExperts,
 };
 
         if (!cancelled) {
@@ -1156,25 +1255,21 @@ programStructureName:
 
               {currentStep === 1 && (
                 <ProfileSpecificationsStep
-                  data={
-                    wizardData
-                      .specifications
-                  }
-                  onChange={(
-                    specifications
-                  ) =>
-                    setWizardData(
-                      (previous) => ({
-                        ...previous,
+                            data={wizardData.specifications}
+                            onChange={(specifications) =>
+                              setWizardData((previous) => ({
+                                ...previous,
 
-                        specifications,
-                      })
-                    )
-                  }
-                  onNext={() =>
-                    setCurrentStep(2)
-                  }
-                />
+                                specifications: {
+                                  ...previous.specifications,
+                                  ...specifications,
+                                },
+                              }))
+                            }
+                            onNext={() =>
+                              setCurrentStep(2)
+                            }
+                          />
               )}
 
 
@@ -1934,39 +2029,37 @@ function mergeCrewWithPersonnel(
 
 
 function mergeCrewWithActivities(
-  crew:
-    ProfileCrewMemberData[],
-  activities:
-    CrewActivityOption[]
+  crew: ProfileCrewMemberData[],
+  activities: CrewActivityOption[]
 ): CrewActivityOption[] {
   const result = [
     ...activities,
   ];
 
-
   for (const member of crew) {
+    const activityTypeName =
+      typeof member.activityTypeName === "string"
+        ? member.activityTypeName.trim()
+        : "";
+
     if (
       member.activityTypeId > 0 &&
-      member.activityTypeName.trim() &&
+      activityTypeName &&
       !result.some(
         (item) =>
-          item.id ===
-          member.activityTypeId
+          item.id === member.activityTypeId
       )
     ) {
       result.push({
-        id:
-          member.activityTypeId,
-
-        name:
-          member.activityTypeName,
+        id: member.activityTypeId,
+        name: activityTypeName,
       });
     }
   }
 
-
   return result;
 }
+
 
 
 /*
@@ -2494,6 +2587,53 @@ function findProgramName(
   return "";
 }
 
+function resolveProgramType(
+  value: number | null,
+  name: string
+): ProgramType | null {
+  if (
+    value === 10 ||
+    value === 20
+  ) {
+    return value;
+  }
+
+  const normalizedName =
+    name.trim();
+
+  if (
+    normalizedName.includes(
+      "زنده"
+    )
+  ) {
+    return 10;
+  }
+
+  if (
+    normalizedName.includes(
+      "ضبط"
+    ) ||
+    normalizedName.includes(
+      "تولید"
+    )
+  ) {
+    return 20;
+  }
+
+  return null;
+}
+
+
+function getProgramTypeTitle(
+  value: ProgramType
+): string {
+  return value === 10
+    ? "زنده"
+    : "ضبطی یا تولیدی";
+}
+
+
+
 function isRecord(
   value: unknown
 ): value is UnknownRecord {
@@ -2579,4 +2719,112 @@ function getNullableNumber(
   }
 
   return null;
+}
+
+
+
+function buildInitialProfileExperts(
+  forecast: UnknownRecord,
+  availableExperts: ProfileExpertOption[],
+  topicAxes: ProfileTopicAxisOption[]
+): ProfileExpertData[] {
+  const rawExpertIds =
+    forecast.expertIds ??
+    forecast.ExpertIds;
+
+  if (!Array.isArray(rawExpertIds)) {
+    return [];
+  }
+
+  const defaultAxis =
+    topicAxes.length === 1
+      ? topicAxes[0]
+      : null;
+
+  const result =
+    new Map<string, ProfileExpertData>();
+
+  for (const rawExpert of rawExpertIds) {
+    let expertId = "";
+    let firstName = "";
+    let lastName = "";
+    let topicAxisId = "";
+
+    if (typeof rawExpert === "string") {
+      expertId = rawExpert.trim();
+    } else if (isRecord(rawExpert)) {
+      expertId =
+        getString(rawExpert, [
+          "expertId",
+          "ExpertId",
+          "id",
+          "Id",
+        ]);
+
+      firstName =
+        getString(rawExpert, [
+          "firstName",
+          "FirstName",
+        ]);
+
+      lastName =
+        getString(rawExpert, [
+          "lastName",
+          "LastName",
+        ]);
+
+      topicAxisId =
+        getString(rawExpert, [
+          "topicAxisId",
+          "TopicAxisId",
+        ]);
+    }
+
+    if (!expertId) {
+      continue;
+    }
+
+    const expertOption =
+      availableExperts.find(
+        (expert) =>
+          expert.id === expertId
+      );
+
+    const selectedAxis =
+      topicAxes.find(
+        (axis) =>
+          axis.id === topicAxisId
+      ) ?? defaultAxis;
+
+    result.set(expertId, {
+      expertId,
+
+      firstName:
+        expertOption?.firstName ??
+        firstName,
+
+      lastName:
+        expertOption?.lastName ??
+        lastName,
+
+      topicAxisId:
+        selectedAxis?.id ?? "",
+
+      topicAxisTitle:
+        selectedAxis?.title ?? "",
+
+      duration:
+        "00:15:00",
+
+      attendanceType:
+        1,
+
+      hasPayment:
+        false,
+    });
+  }
+
+  return Array.from(
+    result.values()
+  );
 }

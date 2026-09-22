@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 
+import type {
+  ReactNode,
+} from "react";
+
 import {
   useParams,
   useRouter,
@@ -14,14 +18,15 @@ import {
 import {
   AlertCircle,
   ArrowRight,
-  CalendarDays,
   FileText,
   LoaderCircle,
-  UserRound,
 } from "lucide-react";
 
-import ForecastStatusBadge from
-  "@/app/component/forecast/forecast-status-badge";
+import ForecastStatusBadge
+  from "@/app/component/forecast/forecast-status-badge";
+
+import ForecastReviewFeedback
+  from "@/app/component/forecast/ForecastReviewFeedback";
 
 import type {
   ForecastStatus,
@@ -33,20 +38,26 @@ import type {
 
 
 interface TopicAxis {
-  id: string;
+  id:
+    string;
 
-  title: string;
+  title:
+    string;
 
-  displayOrder: number;
+  displayOrder:
+    number;
 }
 
 
 interface ForecastDetails {
-  id: string;
+  id:
+    string;
 
-  planId: number;
+  planId:
+    number;
 
-  networkId: number;
+  networkId:
+    number;
 
   networkGroupId:
     number | null;
@@ -54,45 +65,75 @@ interface ForecastDetails {
   episodeNumber:
     number | null;
 
-  broadcastDate: string;
+  broadcastDate:
+    string;
 
-  mainTopic: string;
+  mainTopic:
+    string;
 
-  hasExpert: boolean;
+  hasExpert:
+    boolean;
 
-  status: ForecastStatus;
+  status:
+    ForecastStatus;
 
-  topicAxes: TopicAxis[];
+  topicAxes:
+    TopicAxis[];
 
-  expertIds: string[];
+  expertIds:
+    string[];
 
-  createdByUserId?: string;
+  createdByUserId?:
+    string;
 
-  createdByUserName?: string;
+  createdByUserName?:
+    string;
 
-  createdDate?: string;
+  createdDate?:
+    string;
+
+  lastModifiedDate?:
+    string;
+
+  reviewedByUserId?:
+    string;
+
+  /*
+   * توضیح آخرین اقدام مدیر:
+   * رد یا بازگشت برای اصلاح
+   */
+  lastActionReason:
+    string | null;
 }
 
 
 interface ExpertDetails {
-  id: string;
+  id:
+    string;
 
-  firstName: string;
+  firstName:
+    string;
 
-  lastName: string;
+  lastName:
+    string;
 
-  specialty: string;
+  specialty:
+    string;
 
   education:
     number | null;
 
-  workplace: string;
+  workplace:
+    string;
 
-  mobilePhone: string;
+  mobilePhone:
+    string;
 
-  nationalCode: string;
+  nationalCode:
+    string;
 
-  workPhone?: string;
+  workPhone?:
+    string;
 }
 
 
@@ -106,17 +147,18 @@ export default function ForecastViewPage() {
     }>();
 
   const forecastId =
-    typeof params.id === "string"
-      ? params.id
+    typeof params.id ===
+      "string"
+      ? params.id.trim()
       : "";
+
 
   const [
     forecast,
     setForecast,
-  ] =
-    useState<
-      ForecastDetails | null
-    >(null);
+  ] = useState<
+    ForecastDetails | null
+  >(null);
 
   const [
     programName,
@@ -126,10 +168,9 @@ export default function ForecastViewPage() {
   const [
     experts,
     setExperts,
-  ] =
-    useState<
-      ExpertDetails[]
-    >([]);
+  ] = useState<
+    ExpertDetails[]
+  >([]);
 
   const [
     isLoading,
@@ -146,6 +187,7 @@ export default function ForecastViewPage() {
     let cancelled =
       false;
 
+
     async function loadPageData() {
       try {
         setIsLoading(true);
@@ -157,46 +199,54 @@ export default function ForecastViewPage() {
           );
         }
 
+
         /*
-         * دریافت اطلاعات Forecast
+         * دریافت اطلاعات پیش‌بینی
          */
         const forecastResponse =
-          await fetch(
-            `/api/forecasts/${encodeURIComponent(
-              forecastId
-            )}`,
-            {
-              method: "GET",
+  await fetch(
+    `/api/forecasts/${encodeURIComponent(
+      forecastId
+    )}`,
+    {
+      method:
+        "GET",
 
-              headers: {
-                Accept:
-                  "application/json",
-              },
+      headers: {
+        Accept:
+          "application/json",
+      },
 
-              cache:
-                "no-store",
-            }
-          );
-
+      cache:
+        "no-store",
+    }
+  );
+  
         const forecastData =
           await readJsonResponse(
             forecastResponse
           );
+
 
         if (!forecastResponse.ok) {
           throw new Error(
             getApiMessage(
               forecastData
             ) ??
-              `دریافت اطلاعات پیش‌بینی انجام نشد. کد پاسخ: ${forecastResponse.status}`
+              (
+                "دریافت اطلاعات پیش‌بینی انجام نشد. " +
+                `کد پاسخ: ${forecastResponse.status}`
+              )
           );
         }
 
+
         const normalizedForecast =
-        parseForecastDetails(
+          parseForecastDetails(
             forecastData,
             forecastId
-        );
+          );
+
 
         if (!normalizedForecast) {
           console.error(
@@ -205,20 +255,24 @@ export default function ForecastViewPage() {
           );
 
           throw new Error(
-            "ساختار اطلاعات پیش‌بینی معتبر نیست."
+            "اطلاعات پیش‌بینی در پاسخ سرور پیدا نشد."
           );
         }
+
 
         if (cancelled) {
           return;
         }
 
+
         setForecast(
           normalizedForecast
         );
 
+
         /*
-         * دریافت نام برنامه و اطلاعات کارشناسان
+         * دریافت نام برنامه و
+         * اطلاعات کارشناسان
          */
         const [
           loadedProgramName,
@@ -226,13 +280,16 @@ export default function ForecastViewPage() {
         ] =
           await Promise.all([
             loadProgramName(
-              normalizedForecast.planId
+              normalizedForecast
+                .planId
             ),
 
             loadExperts(
-              normalizedForecast.expertIds
+              normalizedForecast
+                .expertIds
             ),
           ]);
+
 
         if (!cancelled) {
           setProgramName(
@@ -245,6 +302,10 @@ export default function ForecastViewPage() {
         }
       } catch (loadError) {
         if (!cancelled) {
+          setForecast(null);
+          setProgramName("");
+          setExperts([]);
+
           setError(
             loadError instanceof Error
               ? loadError.message
@@ -258,10 +319,13 @@ export default function ForecastViewPage() {
       }
     }
 
+
     void loadPageData();
 
+
     return () => {
-      cancelled = true;
+      cancelled =
+        true;
     };
   }, [
     forecastId,
@@ -416,7 +480,6 @@ export default function ForecastViewPage() {
           max-w-5xl
         "
       >
-        {/* عنوان صفحه */}
         <header
           className="
             mb-6
@@ -484,15 +547,10 @@ export default function ForecastViewPage() {
         </header>
 
 
-        {/* مشخصات اصلی */}
         <ViewSection
           title="مشخصات برنامه"
         >
-          <div
-            className="
-              overflow-x-auto
-            "
-          >
+          <div className="overflow-x-auto">
             <table
               className="
                 w-full
@@ -505,16 +563,26 @@ export default function ForecastViewPage() {
                   label="نام برنامه"
                   value={
                     programName ||
-                    `شناسه برنامه: ${forecast.planId}`
+                    (
+                      forecast.planId > 0
+                        ? `شناسه برنامه: ${toPersianNumber(
+                            forecast.planId
+                          )}`
+                        : "—"
+                    )
                   }
                 />
 
                 <ViewRow
                   label="شماره قسمت"
                   value={
-                    forecast
-                      .episodeNumber ??
-                    "—"
+                    forecast.episodeNumber !==
+                    null
+                      ? toPersianNumber(
+                          forecast
+                            .episodeNumber
+                        )
+                      : "—"
                   }
                 />
 
@@ -529,8 +597,7 @@ export default function ForecastViewPage() {
                   label="تاریخ پخش"
                   value={
                     formatPersianDate(
-                      forecast
-                        .broadcastDate
+                      forecast.broadcastDate
                     )
                   }
                 />
@@ -563,11 +630,7 @@ export default function ForecastViewPage() {
                     وضعیت
                   </th>
 
-                  <td
-                    className="
-                      px-4 py-4
-                    "
-                  >
+                  <td className="px-4 py-4">
                     <ForecastStatusBadge
                       status={
                         forecast.status
@@ -596,21 +659,42 @@ export default function ForecastViewPage() {
                       : "—"
                   }
                 />
+
+                {forecast.lastModifiedDate && (
+                  <ViewRow
+                    label="آخرین تغییر"
+                    value={
+                      formatPersianDate(
+                        forecast
+                          .lastModifiedDate
+                      )
+                    }
+                  />
+                )}
               </tbody>
             </table>
           </div>
         </ViewSection>
 
 
-        {/* محورهای موضوعی */}
+        {/*
+         * نمایش توضیحات مدیر فقط در
+         * وضعیت رد یا بازگشت برای اصلاح
+         */}
+        <ForecastReviewFeedback
+          status={
+            forecast.status
+          }
+          reason={
+            forecast.lastActionReason
+          }
+        />
+
+
         <ViewSection
           title="محورهای موضوعی"
         >
-          <div
-            className="
-              overflow-x-auto
-            "
-          >
+          <div className="overflow-x-auto">
             <table
               className="
                 w-full
@@ -669,7 +753,9 @@ export default function ForecastViewPage() {
                           text-gray-500
                         "
                       >
-                        {index + 1}
+                        {toPersianNumber(
+                          index + 1
+                        )}
                       </td>
 
                       <td
@@ -708,7 +794,6 @@ export default function ForecastViewPage() {
         </ViewSection>
 
 
-        {/* کارشناسان */}
         <ViewSection
           title="کارشناسان برنامه"
         >
@@ -725,11 +810,7 @@ export default function ForecastViewPage() {
               این برنامه کارشناس ندارد.
             </div>
           ) : (
-            <div
-              className="
-                overflow-x-auto
-              "
-            >
+            <div className="overflow-x-auto">
               <table
                 className="
                   w-full
@@ -787,7 +868,9 @@ export default function ForecastViewPage() {
                         "
                       >
                         <td className={tableCellClass}>
-                          {index + 1}
+                          {toPersianNumber(
+                            index + 1
+                          )}
                         </td>
 
                         <td
@@ -797,7 +880,8 @@ export default function ForecastViewPage() {
                             text-gray-800
                           `}
                         >
-                          {`${expert.firstName} ${expert.lastName}`.trim()}
+                          {`${expert.firstName} ${expert.lastName}`.trim() ||
+                            "—"}
                         </td>
 
                         <td className={tableCellClass}>
@@ -851,17 +935,25 @@ export default function ForecastViewPage() {
 
 
 /*
- * دریافت نام برنامه از Route موجود
+ * دریافت نام برنامه
  */
 async function loadProgramName(
   planId: number
 ): Promise<string> {
+  if (
+    !Number.isInteger(planId) ||
+    planId <= 0
+  ) {
+    return "";
+  }
+
   try {
     const response =
       await fetch(
         "/api/programs",
         {
-          method: "GET",
+          method:
+            "GET",
 
           headers: {
             Accept:
@@ -889,15 +981,15 @@ async function loadProgramName(
     }
 
     const programs =
-      responseData.programs
-        .filter(
-          isProgram
-        );
+      responseData.programs.filter(
+        isProgram
+      );
 
     return (
       programs.find(
         (program) =>
-          program.id === planId
+          program.id ===
+          planId
       )?.name ?? ""
     );
   } catch {
@@ -912,21 +1004,26 @@ async function loadProgramName(
 async function loadExperts(
   expertIds: string[]
 ): Promise<ExpertDetails[]> {
-  if (expertIds.length === 0) {
+  if (
+    expertIds.length === 0
+  ) {
     return [];
   }
 
   const results =
     await Promise.allSettled(
       expertIds.map(
-        async (expertId) => {
+        async (
+          expertId
+        ) => {
           const response =
             await fetch(
               `/api/experts/${encodeURIComponent(
                 expertId
               )}`,
               {
-                method: "GET",
+                method:
+                  "GET",
 
                 headers: {
                   Accept:
@@ -981,30 +1078,8 @@ async function loadExperts(
 
 
 /*
- * خواندن امن پاسخ JSON
- */
-async function readJsonResponse(
-  response: Response
-): Promise<unknown | null> {
-  const responseText =
-    await response.text();
-
-  if (!responseText.trim()) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(
-      responseText
-    ) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-
-/*
- * استخراج Forecast از شکل‌های مختلف پاسخ
+ * استخراج اطلاعات Forecast
+ * به‌صورت غیرسخت‌گیرانه
  */
 function parseForecastDetails(
   value: unknown,
@@ -1016,19 +1091,9 @@ function parseForecastDetails(
     );
 
   if (!source) {
-    console.error(
-      "Forecast response is not an object:",
-      value
-    );
-
     return null;
   }
 
-  /*
-   * فقط وجود یک Object برای ادامه کافی است.
-   * فیلدهای غایب با مقدار پیش‌فرض نمایش
-   * داده می‌شوند.
-   */
   const id =
     getIdentifier(
       source.id
@@ -1052,20 +1117,21 @@ function parseForecastDetails(
       : [];
 
   const expertIds =
-    Array.isArray(
-      source.expertIds
-    )
-      ? source.expertIds
-          .map(
-            getIdentifier
-          )
-          .filter(
-            (
-              expertId
-            ) =>
-              expertId.length > 0
-          )
-      : [];
+    extractExpertIds(
+      source
+    );
+
+  const lastActionReason =
+    getString(
+      source.lastActionReason
+    ) ||
+    getString(
+      source.returnReason
+    ) ||
+    getString(
+      source.rejectionReason
+    ) ||
+    null;
 
   return {
     id,
@@ -1098,15 +1164,18 @@ function parseForecastDetails(
     mainTopic:
       getString(
         source.mainTopic
-      ) || "—",
+      ) ||
+      "—",
 
     hasExpert:
-      source.hasExpert === true,
+      getBoolean(
+        source.hasExpert
+      ),
 
     status:
-      normalizeForecastStatus(
+      normalizeStatus(
         source.status
-      ) ?? "Draft",
+      ),
 
     topicAxes,
 
@@ -1115,24 +1184,131 @@ function parseForecastDetails(
     createdByUserId:
       getString(
         source.createdByUserId
-      ) || undefined,
+      ) ||
+      undefined,
 
     createdByUserName:
       getString(
         source.createdByUserName
-      ) || undefined,
+      ) ||
+      undefined,
 
     createdDate:
       getString(
         source.createdDate
-      ) || undefined,
+      ) ||
+      undefined,
+
+    lastModifiedDate:
+      getString(
+        source.lastModifiedDate
+      ) ||
+      undefined,
+
+    reviewedByUserId:
+      getString(
+        source.reviewedByUserId
+      ) ||
+      undefined,
+
+    lastActionReason,
   };
 }
+
+
+function extractExpertIds(
+  source: Record<
+    string,
+    unknown
+  >
+): string[] {
+  if (
+    Array.isArray(
+      source.expertIds
+    )
+  ) {
+    return source.expertIds
+      .map(
+        getIdentifier
+      )
+      .filter(
+        (
+          expertId
+        ) =>
+          expertId.length > 0
+      );
+  }
+
+  /*
+   * پشتیبانی از حالتی که Backend
+   * آرایه experts برگرداند.
+   */
+  if (
+    Array.isArray(
+      source.experts
+    )
+  ) {
+    return source.experts
+      .map(
+        (
+          expert
+        ) => {
+          if (!isRecord(expert)) {
+            return "";
+          }
+
+          return (
+            getIdentifier(
+              expert.expertId
+            ) ||
+            getIdentifier(
+              expert.id
+            )
+          );
+        }
+      )
+      .filter(
+        (
+          expertId
+        ) =>
+          expertId.length > 0
+      );
+  }
+
+  return [];
+}
+
 
 function parseTopicAxis(
   value: unknown,
   index: number
 ): TopicAxis | null {
+  /*
+   * اگر Backend فقط عنوان را
+   * به‌صورت string برگرداند.
+   */
+  if (
+    typeof value ===
+      "string"
+  ) {
+    const title =
+      value.trim();
+
+    if (!title) {
+      return null;
+    }
+
+    return {
+      id:
+        `topic-${index}`,
+
+      title,
+
+      displayOrder:
+        index + 1,
+    };
+  }
+
   if (!isRecord(value)) {
     return null;
   }
@@ -1140,6 +1316,9 @@ function parseTopicAxis(
   const title =
     getString(
       value.title
+    ) ||
+    getString(
+      value.name
     );
 
   if (!title) {
@@ -1148,7 +1327,7 @@ function parseTopicAxis(
 
   return {
     id:
-      getString(
+      getIdentifier(
         value.id
       ) ||
       `topic-${index}`,
@@ -1182,7 +1361,7 @@ function parseExpertDetails(
   }
 
   const id =
-    getString(
+    getIdentifier(
       source.id
     );
 
@@ -1196,17 +1375,19 @@ function parseExpertDetails(
       source.lastName
     );
 
-  if (
-    !id ||
-    !firstName ||
-    !lastName
-  ) {
+  /*
+   * فقط شناسه برای معتبر بودن
+   * پاسخ الزامی است.
+   */
+  if (!id) {
     return null;
   }
 
   return {
     id,
+
     firstName,
+
     lastName,
 
     specialty:
@@ -1215,7 +1396,7 @@ function parseExpertDetails(
       ),
 
     education:
-      getNullableNumber(
+      getNumber(
         source.education
       ),
 
@@ -1237,14 +1418,65 @@ function parseExpertDetails(
     workPhone:
       getString(
         source.workPhone
-      ) || undefined,
+      ) ||
+      undefined,
   };
+}
+
+
+function findForecastObject(
+  value: unknown,
+  depth = 0
+): Record<
+  string,
+  unknown
+> | null {
+  if (
+    depth > 6 ||
+    !isRecord(value)
+  ) {
+    return null;
+  }
+
+  if (
+    "id" in value ||
+    "mainTopic" in value ||
+    "planId" in value
+  ) {
+    return value;
+  }
+
+  const wrapperNames = [
+    "forecast",
+    "data",
+    "result",
+    "value",
+    "item",
+  ];
+
+  for (
+    const wrapperName of
+    wrapperNames
+  ) {
+    const result =
+      findForecastObject(
+        value[wrapperName],
+        depth + 1
+      );
+
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
 }
 
 
 function unwrapResponseObject(
   value: unknown,
-  propertyNames: string[]
+  propertyNames:
+    string[]
 ): Record<
   string,
   unknown
@@ -1260,7 +1492,11 @@ function unwrapResponseObject(
     const nestedValue =
       value[propertyName];
 
-    if (isRecord(nestedValue)) {
+    if (
+      isRecord(
+        nestedValue
+      )
+    ) {
       return nestedValue;
     }
   }
@@ -1269,38 +1505,54 @@ function unwrapResponseObject(
 }
 
 
-function normalizeForecastStatus(
-  value: unknown
-): ForecastStatus | null {
-  switch (value) {
-    case 1:
-    case "1":
-    case "Draft":
-      return "Draft";
+function normalizeStatus(
+  status: unknown
+): ForecastStatus {
+  const value =
+    String(
+      status ?? ""
+    ).trim();
 
-    case 2:
-    case "2":
-    case "PendingReview":
-      return "PendingReview";
+  const statusMap:
+    Record<
+      string,
+      ForecastStatus
+    > = {
+    "1":
+      "Draft",
 
-    case 3:
-    case "3":
-    case "Approved":
-      return "Approved";
+    Draft:
+      "Draft",
 
-    case 4:
-    case "4":
-    case "Rejected":
-      return "Rejected";
+    "2":
+      "PendingReview",
 
-    case 5:
-    case "5":
-    case "ReturnedForEdit":
-      return "ReturnedForEdit";
+    PendingReview:
+      "PendingReview",
 
-    default:
-      return null;
-  }
+    "3":
+      "Approved",
+
+    Approved:
+      "Approved",
+
+    "4":
+      "Rejected",
+
+    Rejected:
+      "Rejected",
+
+    "5":
+      "ReturnedForEdit",
+
+    ReturnedForEdit:
+      "ReturnedForEdit",
+  };
+
+  return (
+    statusMap[value] ??
+    "Draft"
+  );
 }
 
 
@@ -1319,6 +1571,29 @@ function isProgram(
 }
 
 
+/*
+ * خواندن امن پاسخ JSON
+ */
+async function readJsonResponse(
+  response: Response
+): Promise<unknown | null> {
+  const responseText =
+    await response.text();
+
+  if (!responseText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      responseText
+    ) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+
 function getApiMessage(
   value: unknown
 ): string | null {
@@ -1326,25 +1601,38 @@ function getApiMessage(
     return null;
   }
 
-  if (
-    typeof value.message ===
-      "string"
-  ) {
-    return value.message;
+  const message =
+    getString(
+      value.message
+    ) ||
+    getString(
+      value.description
+    ) ||
+    getString(
+      value.detail
+    ) ||
+    getString(
+      value.title
+    );
+
+  if (message) {
+    return message;
   }
 
   if (
-    typeof value.description ===
-      "string"
+    isRecord(
+      value.details
+    )
   ) {
-    return value.description;
-  }
-
-  if (
-    typeof value.errors ===
-      "string"
-  ) {
-    return value.errors;
+    return (
+      getString(
+        value.details.message
+      ) ||
+      getString(
+        value.details.detail
+      ) ||
+      null
+    );
   }
 
   return null;
@@ -1361,22 +1649,50 @@ function getString(
 }
 
 
+function getIdentifier(
+  value: unknown
+): string {
+  if (
+    typeof value ===
+      "string"
+  ) {
+    return value.trim();
+  }
+
+  if (
+    typeof value ===
+      "number" &&
+    Number.isFinite(value)
+  ) {
+    return String(value);
+  }
+
+  return "";
+}
+
+
 function getNumber(
   value: unknown
 ): number | null {
   if (
-    typeof value === "number" &&
+    typeof value ===
+      "number" &&
     Number.isFinite(value)
   ) {
     return value;
   }
 
   if (
-    typeof value === "string" &&
+    typeof value ===
+      "string" &&
     value.trim()
   ) {
     const parsedValue =
-      Number(value);
+      Number(
+        normalizeDigits(
+          value
+        )
+      );
 
     return Number.isFinite(
       parsedValue
@@ -1389,11 +1705,15 @@ function getNumber(
 }
 
 
-function getNullableNumber(
+function getBoolean(
   value: unknown
-): number | null {
-  return getNumber(
-    value
+): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True"
   );
 }
 
@@ -1416,8 +1736,16 @@ function isRecord(
 function formatPersianDate(
   value: string
 ): string {
+  if (!value) {
+    return "—";
+  }
+
   const date =
-    new Date(value);
+    new Date(
+      normalizeDigits(
+        value
+      )
+    );
 
   if (
     Number.isNaN(
@@ -1438,6 +1766,15 @@ function formatPersianDate(
 
       day:
         "2-digit",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+
+      timeZone:
+        "UTC",
     }
   ).format(date);
 }
@@ -1448,7 +1785,10 @@ function getEducationTitle(
     number | null
 ): string {
   const educationTitles:
-    Record<number, string> = {
+    Record<
+      number,
+      string
+    > = {
     1:
       "دیپلم",
 
@@ -1473,7 +1813,60 @@ function getEducationTitle(
     educationTitles[
       education
     ] ??
-    String(education)
+    toPersianNumber(
+      education
+    )
+  );
+}
+
+
+function normalizeDigits(
+  value: string
+): string {
+  const persianDigits =
+    "۰۱۲۳۴۵۶۷۸۹";
+
+  const arabicDigits =
+    "٠١٢٣٤٥٦٧٨٩";
+
+  return value
+    .replace(
+      /[۰-۹]/g,
+      (
+        digit
+      ) =>
+        String(
+          persianDigits.indexOf(
+            digit
+          )
+        )
+    )
+    .replace(
+      /[٠-٩]/g,
+      (
+        digit
+      ) =>
+        String(
+          arabicDigits.indexOf(
+            digit
+          )
+        )
+    );
+}
+
+
+function toPersianNumber(
+  value:
+    string | number
+): string {
+  return String(value).replace(
+    /\d/g,
+    (
+      digit
+    ) =>
+      "۰۱۲۳۴۵۶۷۸۹"[
+        Number(digit)
+      ]
   );
 }
 
@@ -1482,10 +1875,11 @@ function ViewSection({
   title,
   children,
 }: {
-  title: string;
+  title:
+    string;
 
   children:
-    React.ReactNode;
+    ReactNode;
 }) {
   return (
     <section
@@ -1528,10 +1922,11 @@ function ViewRow({
   label,
   value,
 }: {
-  label: string;
+  label:
+    string;
 
   value:
-    React.ReactNode;
+    ReactNode;
 }) {
   return (
     <tr
@@ -1583,77 +1978,3 @@ const tableCellClass = `
   text-sm
   text-gray-600
 `;
-
-
-
-
-function findForecastObject(
-  value: unknown,
-  depth = 0
-): Record<
-  string,
-  unknown
-> | null {
-  if (
-    depth > 6 ||
-    !isRecord(value)
-  ) {
-    return null;
-  }
-
-  /*
-   * پاسخ مستقیم Forecast
-   */
-  if (
-    "id" in value ||
-    "mainTopic" in value ||
-    "planId" in value
-  ) {
-    return value;
-  }
-
-  const wrapperNames = [
-    "forecast",
-    "data",
-    "result",
-    "value",
-    "item",
-  ];
-
-  for (
-    const wrapperName of
-    wrapperNames
-  ) {
-    const result =
-      findForecastObject(
-        value[wrapperName],
-        depth + 1
-      );
-
-    if (result) {
-      return result;
-    }
-  }
-
-  return null;
-}
-
-
-function getIdentifier(
-  value: unknown
-): string {
-  if (
-    typeof value === "string"
-  ) {
-    return value.trim();
-  }
-
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  ) {
-    return String(value);
-  }
-
-  return "";
-}

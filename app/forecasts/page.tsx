@@ -625,29 +625,37 @@ useEffect(() => {
 
                         <td className={cellClass}>
                           {forecast.hasExpert
-                            ? `${forecast.expertIds.length} کارشناس`
+                            ? `${forecast.expertIds?.length ?? 0} کارشناس`
                             : "ندارد"}
                         </td>
 
                         <td className={cellClass}>
-                          {forecast.topicAxes.length > 0
-                            ? [...forecast.topicAxes]
-                                .sort(
-                                  (
-                                    first,
-                                    second
-                                  ) =>
-                                    first.displayOrder -
-                                    second.displayOrder
-                                )
-                                .map(
-                                  (
-                                    axis
-                                  ) =>
-                                    axis.title
-                                )
-                                .join("، ")
-                            : "—"}
+                          {Array.isArray(
+                              forecast.topicAxes
+                            ) &&
+                            forecast.topicAxes.length > 0
+                              ? [...forecast.topicAxes]
+                                  .sort(
+                                    (
+                                      first,
+                                      second
+                                    ) =>
+                                      (
+                                        first.displayOrder ??
+                                        0
+                                      ) -
+                                      (
+                                        second.displayOrder ??
+                                        0
+                                      )
+                                  )
+                                  .map(
+                                    (axis) =>
+                                      axis.title
+                                  )
+                                  .filter(Boolean)
+                                  .join("، ")
+                              : "—"}
                         </td>
 
                         {/* <td className={cellClass}>

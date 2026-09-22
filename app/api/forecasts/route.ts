@@ -44,6 +44,38 @@ export async function GET(
   try {
     const accessToken =
       await getAccessToken();
+      if (
+  process.env.NODE_ENV ===
+  "development" &&
+  accessToken
+) {
+  const tokenPayload =
+    readJwtPayload(
+      accessToken
+    );
+
+  console.log(
+    "FORECAST ROUTE TOKEN:",
+    {
+      sub:
+        tokenPayload?.sub,
+
+      userName:
+        tokenPayload?.userName ??
+        tokenPayload?.unique_name,
+
+      roles:
+        tokenPayload?.role ??
+        tokenPayload?.roles,
+
+      networkIds:
+        tokenPayload?.networkIds,
+
+      networkGroupId:
+        tokenPayload?.networkGroupId,
+    }
+  );
+}
 
 
     if (!accessToken) {
@@ -162,6 +194,30 @@ export async function GET(
       parseJsonResponse(
         responseText
       );
+      //test
+      console.log(
+  "FORECAST LIST BACKEND RESPONSE:",
+  {
+    backendUrl:
+      backendUrl.toString(),
+
+    status:
+      backendResponse.status,
+
+    pagination:
+      backendResponse.headers.get(
+        "Pagination"
+      ),
+
+    responseData,
+
+    extractedItemsCount:
+      getForecastItems(
+        responseData
+      )?.length,
+  }
+);
+
 
 
     if (!backendResponse.ok) {
@@ -549,107 +605,513 @@ function getForecastItems(
   value: unknown
 ): ForecastResponse[] | null {
   /*
-   * ساختار اصلی مستند جدید:
-   *
-   * [
-   *   {...},
-   *   {...}
-   * ]
+   * مطابق پاسخ فعلی Backend،
+   * پاسخ اصلی مستقیماً آرایه است.
    */
   if (Array.isArray(value)) {
-    return value.filter(
-      isForecastListItem
-    );
+    return value
+      .map(
+        normalizeForecastItem
+      )
+      .filter(
+        (
+          item
+        ): item is ForecastResponse =>
+          item !== null
+      );
   }
 
 
-  if (!isRecord(value)) {
+  if (!isObjectValue(value)) {
     return null;
   }
 
 
   /*
-   * پشتیبانی از Wrapperهای احتمالی
-   * برای جلوگیری از سخت‌گیری غیرضروری.
+   * پشتیبانی از پاسخ‌های Wrapperدار
    */
-  const directCandidates = [
+  const possibleArrays = [
     value.items,
+    value.Items,
     value.forecasts,
+    value.Forecasts,
+    value.data,
+    value.Data,
     value.result,
+    value.Result,
     value.$values,
   ];
 
 
   for (
-    const candidate of
-    directCandidates
+    const possibleArray of
+    possibleArrays
   ) {
     if (
       Array.isArray(
-        candidate
+        possibleArray
       )
     ) {
-      return candidate.filter(
-        isForecastListItem
-      );
+      return possibleArray
+        .map(
+          normalizeForecastItem
+        )
+        .filter(
+          (
+            item
+          ): item is ForecastResponse =>
+            item !== null
+        );
     }
   }
 
 
   /*
-   * ساختار:
-   *
-   * {
-   *   data: [...]
-   * }
+   * پشتیبانی از پاسخ‌های تو در تو
    */
-  if (
-    Array.isArray(
-      value.data
-    )
+  const possibleObjects = [
+    value.data,
+    value.Data,
+    value.result,
+    value.Result,
+  ];
+
+
+  for (
+    const possibleObject of
+    possibleObjects
   ) {
-    return value.data.filter(
-      isForecastListItem
-    );
-  }
-
-
-  /*
-   * ساختارهای تو در تو:
-   *
-   * {
-   *   data: {
-   *     items: [...]
-   *   }
-   * }
-   */
-  if (isRecord(value.data)) {
-    const nestedCandidates = [
-      value.data.items,
-      value.data.forecasts,
-      value.data.result,
-      value.data.$values,
-    ];
-
-
-    for (
-      const candidate of
-      nestedCandidates
+    if (
+      !isObjectValue(
+        possibleObject
+      )
     ) {
-      if (
-        Array.isArray(
-          candidate
+      continue;
+    }
+
+
+    const nestedArray =
+      possibleObject.items ??
+      possibleObject.Items ??
+      possibleObject.forecasts ??
+      possibleObject.Forecasts ??
+      possibleObject.$values;
+
+
+    if (
+      Array.isArray(
+        nestedArray
+      )
+    ) {
+      return nestedArray
+        .map(
+          normalizeForecastItem
         )
-      ) {
-        return candidate.filter(
-          isForecastListItem
+        .filter(
+          (
+            item
+          ): item is ForecastResponse =>
+            item !== null
         );
-      }
     }
   }
 
 
   return null;
+}
+
+
+function normalizeForecastItem(
+  value: unknown
+): ForecastResponse | null {
+  if (
+    !isObjectValue(
+      value
+    )
+  ) {
+    return null;
+  }
+
+
+  const id =
+    readStringValue(
+      value.id
+    );
+
+  /*
+   * فقط id برای نگه‌داشتن رکورد
+   * الزامی در نظر گرفته می‌شود.
+   */
+  if (!id) {
+    return null;
+  }
+
+
+  const topicAxes =
+    Array.isArray(
+      value.topicAxes
+    )
+      ? value.topicAxes
+          .map(
+            (
+              topicAxis,
+              index
+            ) =>
+              normalizeTopicAxis(
+                topicAxis,
+                index
+              )
+          )
+          .filter(
+            (
+              topicAxis
+            ): topicAxis is {
+              id: string;
+              title: string;
+              displayOrder: number;
+            } =>
+              topicAxis !== null
+          )
+      : [];
+
+
+  const expertIds =
+    Array.isArray(
+      value.expertIds
+    )
+      ? value.expertIds
+          .map(
+            readIdentifierValue
+          )
+          .filter(
+            (
+              expertId
+            ) =>
+              expertId.length > 0
+          )
+      : [];
+
+
+  return {
+    id,
+
+    planId:
+      readNumberValue(
+        value.planId
+      ) ?? 0,
+
+    networkId:
+      readNumberValue(
+        value.networkId
+      ) ?? 0,
+
+    networkGroupId:
+      readNumberValue(
+        value.networkGroupId
+      ) ?? 0,
+
+    episodeNumber:
+      readNumberValue(
+        value.episodeNumber
+      ) ?? 0,
+
+    broadcastDate:
+      readStringValue(
+        value.broadcastDate
+      ),
+
+    mainTopic:
+      readStringValue(
+        value.mainTopic
+      ),
+
+    hasExpert:
+      readBooleanValue(
+        value.hasExpert
+      ),
+
+    /*
+     * تبدیل وضعیت عددی Backend
+     * به رشته مورد استفاده Frontend
+     */
+    status:
+      normalizeForecastStatus(
+        value.status
+      ),
+
+    topicAxes,
+
+    expertIds,
+
+    /*
+     * Backend فعلی userCreatorName
+     * برمی‌گرداند.
+     */
+    createdByUserId:
+      readStringValue(
+        value.createdByUserId
+      ) ||
+      readStringValue(
+        value.userCreatorId
+      ),
+
+    createdByUserName:
+      readStringValue(
+        value.createdByUserName
+      ) ||
+      readStringValue(
+        value.userCreatorName
+      ),
+
+    createdDate:
+      readStringValue(
+        value.createdDate
+      ),
+
+    reviewedByUserId:
+      readStringValue(
+        value.reviewedByUserId
+      ) ||
+      null,
+
+    lastActionReason:
+      readStringValue(
+        value.lastActionReason
+      ) ||
+      readStringValue(
+        value.returnReason
+      ) ||
+      readStringValue(
+        value.rejectionReason
+      ) ||
+      null,
+
+    lastModifiedDate:
+      readStringValue(
+        value.lastModifiedDate
+      ) ||
+      null,
+  };
+}
+function normalizeTopicAxis(
+  value: unknown,
+  index: number
+): {
+  id: string;
+  title: string;
+  displayOrder: number;
+} | null {
+  /*
+   * اگر محور فقط به‌صورت رشته باشد
+   */
+  if (
+    typeof value ===
+      "string"
+  ) {
+    const title =
+      value.trim();
+
+    if (!title) {
+      return null;
+    }
+
+    return {
+      id:
+        `topic-${index}`,
+
+      title,
+
+      displayOrder:
+        index + 1,
+    };
+  }
+
+
+  if (
+    !isObjectValue(
+      value
+    )
+  ) {
+    return null;
+  }
+
+
+  const title =
+    readStringValue(
+      value.title
+    ) ||
+    readStringValue(
+      value.name
+    );
+
+
+  if (!title) {
+    return null;
+  }
+
+
+  return {
+    id:
+      readIdentifierValue(
+        value.id
+      ) ||
+      `topic-${index}`,
+
+    title,
+
+    displayOrder:
+      readNumberValue(
+        value.displayOrder
+      ) ??
+      index + 1,
+  };
+}
+
+function normalizeForecastStatus(
+  value: unknown
+): ForecastResponse["status"] {
+  const normalizedValue =
+    String(
+      value ?? ""
+    ).trim();
+
+
+  const statusMap:
+    Record<
+      string,
+      ForecastResponse["status"]
+    > = {
+    "1":
+      "Draft",
+
+    Draft:
+      "Draft",
+
+    "2":
+      "PendingReview",
+
+    PendingReview:
+      "PendingReview",
+
+    "3":
+      "Approved",
+
+    Approved:
+      "Approved",
+
+    "4":
+      "Rejected",
+
+    Rejected:
+      "Rejected",
+
+    "5":
+      "ReturnedForEdit",
+
+    ReturnedForEdit:
+      "ReturnedForEdit",
+  };
+
+
+  return (
+    statusMap[
+      normalizedValue
+    ] ??
+    "Draft"
+  );
+}
+
+function isObjectValue(
+  value: unknown
+): value is Record<
+  string,
+  unknown
+> {
+  return (
+    typeof value ===
+      "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+
+function readStringValue(
+  value: unknown
+): string {
+  return typeof value ===
+    "string"
+    ? value.trim()
+    : "";
+}
+
+
+function readIdentifierValue(
+  value: unknown
+): string {
+  if (
+    typeof value ===
+      "string"
+  ) {
+    return value.trim();
+  }
+
+  if (
+    typeof value ===
+      "number" &&
+    Number.isFinite(value)
+  ) {
+    return String(value);
+  }
+
+  return "";
+}
+
+
+function readNumberValue(
+  value: unknown
+): number | null {
+  if (
+    typeof value ===
+      "number" &&
+    Number.isFinite(value)
+  ) {
+    return value;
+  }
+
+
+  if (
+    typeof value ===
+      "string" &&
+    value.trim()
+  ) {
+    const parsedValue =
+      Number(
+        value.trim()
+      );
+
+    return Number.isFinite(
+      parsedValue
+    )
+      ? parsedValue
+      : null;
+  }
+
+
+  return null;
+}
+
+
+function readBooleanValue(
+  value: unknown
+): boolean {
+  return (
+    value === true ||
+    value === 1 ||
+    value === "1" ||
+    value === "true" ||
+    value === "True"
+  );
 }
 
 
@@ -844,42 +1306,49 @@ function getPaginationMetadata(
    * به currentPage تبدیل می‌شود.
    */
   return {
-    currentPage:
-      getFiniteNumber(
-        headerData.pageNumber,
-        fallback.currentPage
-      ),
+  currentPage:
+    getFiniteNumber(
+      headerData.pageNumber ??
+      headerData.PageNumber,
+      fallback.currentPage
+    ),
 
-    totalPages:
-      getFiniteNumber(
-        headerData.totalPages,
-        fallback.totalPages
-      ),
+  totalPages:
+    getFiniteNumber(
+      headerData.totalPages ??
+      headerData.TotalPages,
+      fallback.totalPages
+    ),
 
-    pageSize:
-      getFiniteNumber(
-        headerData.pageSize,
-        fallback.pageSize
-      ),
+  pageSize:
+    getFiniteNumber(
+      headerData.pageSize ??
+      headerData.PageSize,
+      fallback.pageSize
+    ),
 
-    totalCount:
-      getFiniteNumber(
-        headerData.totalCount,
-        fallback.totalCount
-      ),
+  totalCount:
+    getFiniteNumber(
+      headerData.totalCount ??
+      headerData.TotalCount,
+      fallback.totalCount
+    ),
 
-    hasPrevious:
-      typeof headerData.hasPrevious ===
-      "boolean"
-        ? headerData.hasPrevious
-        : fallback.hasPrevious,
+  hasPrevious:
+    readPaginationBoolean(
+      headerData.hasPrevious ??
+      headerData.HasPrevious,
+      fallback.hasPrevious
+    ),
 
-    hasNext:
-      typeof headerData.hasNext ===
-      "boolean"
-        ? headerData.hasNext
-        : fallback.hasNext,
-  };
+  hasNext:
+    readPaginationBoolean(
+      headerData.hasNext ??
+      headerData.HasNext,
+      fallback.hasNext
+    ),
+};
+
 }
 
 function isFinalSubmitRequest(value: unknown): value is FinalSubmitRequest {
@@ -1326,4 +1795,73 @@ function getCreatedForecastId(
   }
 
   return null;
+}
+
+
+function readJwtPayload(
+  token: string
+): Record<
+  string,
+  unknown
+> | null {
+  try {
+    const parts =
+      token.split(".");
+
+    if (parts.length < 2) {
+      return null;
+    }
+
+    const normalizedPayload =
+      parts[1]
+        .replace(
+          /-/g,
+          "+"
+        )
+        .replace(
+          /_/g,
+          "/"
+        );
+
+    const payload =
+      Buffer.from(
+        normalizedPayload,
+        "base64"
+      ).toString(
+        "utf8"
+      );
+
+    const value =
+      JSON.parse(
+        payload
+      ) as unknown;
+
+    return isRecord(value)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPaginationBoolean(
+  value: unknown,
+  fallback: boolean
+): boolean {
+  if (
+    typeof value ===
+      "boolean"
+  ) {
+    return value;
+  }
+
+  if (value === "true") {
+    return true;
+  }
+
+  if (value === "false") {
+    return false;
+  }
+
+  return fallback;
 }

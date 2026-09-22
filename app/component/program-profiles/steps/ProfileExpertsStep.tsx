@@ -1,16 +1,21 @@
 "use client";
 
 import {
+  type ReactNode,
+  useMemo,
   useState,
 } from "react";
 
 import {
   ArrowLeft,
   ArrowRight,
+  Check,
+  Pencil,
   Plus,
   Trash2,
   UserRound,
   UsersRound,
+  X,
 } from "lucide-react";
 
 import {
@@ -23,97 +28,41 @@ import type {
 } from "@/app/types/program-profile";
 
 
-/*
- * گزینه کارشناس برای Dropdown
- */
 export interface ProfileExpertOption {
-  id:
-    string;
-
-  firstName:
-    string;
-
-  lastName:
-    string;
+  id: string;
+  firstName: string;
+  lastName: string;
 }
 
 
-/*
- * گزینه محور موضوعی Forecast
- */
 export interface ProfileTopicAxisOption {
-  id:
-    string;
-
-  title:
-    string;
+  id: string;
+  title: string;
 }
 
 
 interface ProfileExpertsStepProps {
-  hasExpert:
-    boolean;
-
-  experts:
-    ProfileExpertData[];
-
-  availableExperts:
-    ProfileExpertOption[];
-
-  topicAxes:
-    ProfileTopicAxisOption[];
-
-  isExpertsLoading?:
-    boolean;
-
-  expertsError?:
-    string;
-
+  hasExpert: boolean;
+  experts: ProfileExpertData[];
+  availableExperts: ProfileExpertOption[];
+  topicAxes: ProfileTopicAxisOption[];
+  isExpertsLoading?: boolean;
+  expertsError?: string;
   onChange: (
-    experts:
-      ProfileExpertData[]
+    experts: ProfileExpertData[]
   ) => void;
-
-  onBack:
-    () => void;
-
-  onNext:
-    () => void;
+  onBack: () => void;
+  onNext: () => void;
 }
 
 
 interface ExpertFormData {
-  expertId:
-    string;
-
-  topicAxisId:
-    string;
-
-  duration:
-    string;
-
-  attendanceType:
-    AttendanceType;
-
-  hasPayment:
-    boolean;
+  expertId: string;
+  topicAxisId: string;
+  duration: string;
+  attendanceType: AttendanceType;
+  hasPayment: boolean;
 }
-
-
-const initialExpertForm:
-  ExpertFormData = {
-  expertId: "",
-
-  topicAxisId: "",
-
-  duration:
-    "00:15:00",
-
-  attendanceType: 1,
-
-  hasPayment:
-    false,
-};
 
 
 export default function ProfileExpertsStep({
@@ -127,80 +76,65 @@ export default function ProfileExpertsStep({
   onBack,
   onNext,
 }: ProfileExpertsStepProps) {
-  const [
-    formData,
-    setFormData,
-  ] =
-    useState<ExpertFormData>(
-      initialExpertForm
+  const [formData, setFormData] =
+    useState<ExpertFormData>(() =>
+      createEmptyForm(topicAxes)
     );
 
-  const [
-    validationError,
-    setValidationError,
-  ] = useState("");
+  const [editingIndex, setEditingIndex] =
+    useState<number | null>(null);
+
+  const [validationError, setValidationError] =
+    useState("");
 
 
   /*
-   * افزودن کارشناس به FormData اصلی
+   * ممکن است کارشناس ثبت‌شده در Forecast در صفحه اول
+   * availableExperts نباشد. او را برای نمایش و ویرایش نگه می‌داریم.
    */
-  function addExpert() {
+  const selectableExperts =
+    useMemo(
+      () =>
+        mergeAvailableWithSelected(
+          availableExperts,
+          experts
+        ),
+      [availableExperts, experts]
+    );
+
+
+  function resetForm() {
+    setFormData(
+      createEmptyForm(topicAxes)
+    );
+    setEditingIndex(null);
+    setValidationError("");
+  }
+
+
+  function saveExpert() {
     setValidationError("");
 
-
-    if (!formData.expertId) {
-      setValidationError(
-        "انتخاب کارشناس الزامی است."
+    const validationMessage =
+      validateExpertForm(
+        formData,
+        selectableExperts,
+        topicAxes
       );
 
+    if (validationMessage) {
+      setValidationError(
+        validationMessage
+      );
       return;
     }
-
-
-    if (!formData.topicAxisId) {
-      setValidationError(
-        "انتخاب محور موضوعی الزامی است."
-      );
-
-      return;
-    }
-
-
-    const normalizedDuration =
-      normalizeDigits(
-        formData.duration.trim()
-      );
-
-
-    if (
-      !isTimeSpan(
-        normalizedDuration
-      )
-    ) {
-      setValidationError(
-        "مدت حضور باید با فرمت hh:mm:ss وارد شود."
-      );
-
-      return;
-    }
-
 
     const selectedExpert =
-      availableExperts.find(
+      selectableExperts.find(
         (expert) =>
           expert.id ===
           formData.expertId
       );
-
-
-    if (!selectedExpert) {
-      setValidationError(
-        "اطلاعات کارشناس انتخاب‌شده پیدا نشد."
-      );
-
-      return;
-    }
-
 
     const selectedAxis =
       topicAxes.find(
@@ -209,108 +143,128 @@ export default function ProfileExpertsStep({
           formData.topicAxisId
       );
 
-
-    if (!selectedAxis) {
+    if (!selectedExpert || !selectedAxis) {
       setValidationError(
-        "اطلاعات محور موضوعی انتخاب‌شده پیدا نشد."
+        "اطلاعات کارشناس یا محور موضوعی پیدا نشد."
       );
-
       return;
     }
 
-
-    /*
-     * جلوگیری از ثبت یک کارشناس
-     * برای یک محور به‌صورت تکراری
-     */
-    const alreadyExists =
-      experts.some(
-        (expert) =>
+    const duplicateIndex =
+      experts.findIndex(
+        (expert, index) =>
+          index !== editingIndex &&
           expert.expertId ===
             formData.expertId &&
           expert.topicAxisId ===
             formData.topicAxisId
       );
 
-
-    if (alreadyExists) {
+    if (duplicateIndex !== -1) {
       setValidationError(
-        "این کارشناس قبلاً برای محور انتخاب‌شده اضافه شده است."
+        "این کارشناس قبلاً برای محور انتخاب‌شده ثبت شده است."
       );
-
       return;
     }
 
-
-    const newExpert:
+    const normalizedExpert:
       ProfileExpertData = {
       expertId:
         selectedExpert.id,
-
       firstName:
         selectedExpert.firstName,
-
       lastName:
         selectedExpert.lastName,
-
       topicAxisId:
         selectedAxis.id,
-
       topicAxisTitle:
         selectedAxis.title,
-
       duration:
-        normalizedDuration,
-
+        normalizeDigits(
+          formData.duration.trim()
+        ),
       attendanceType:
         formData.attendanceType,
-
       hasPayment:
         formData.hasPayment,
     };
 
+    if (editingIndex === null) {
+      onChange([
+        ...experts,
+        normalizedExpert,
+      ]);
+    } else {
+      onChange(
+        experts.map(
+          (expert, index) =>
+            index === editingIndex
+              ? normalizedExpert
+              : expert
+        )
+      );
+    }
 
-    onChange([
-      ...experts,
-      newExpert,
-    ]);
-
-
-    /*
-     * پاک‌کردن فرم افزودن
-     */
-    setFormData(
-      initialExpertForm
-    );
+    resetForm();
   }
 
 
-  /*
-   * حذف کارشناس
-   */
+  function startEditing(
+    expert: ProfileExpertData,
+    index: number
+  ) {
+    setFormData({
+      expertId:
+        expert.expertId,
+      topicAxisId:
+        expert.topicAxisId,
+      duration:
+        expert.duration ||
+        "00:15:00",
+      attendanceType:
+        expert.attendanceType,
+      hasPayment:
+        expert.hasPayment,
+    });
+
+    setEditingIndex(index);
+    setValidationError("");
+
+    document
+      .getElementById(
+        "profile-expert-form"
+      )
+      ?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+  }
+
+
   function deleteExpert(
     index: number
   ) {
     onChange(
       experts.filter(
-        (
-          _expert,
-          expertIndex
-        ) =>
+        (_expert, expertIndex) =>
           expertIndex !== index
       )
     );
+
+    if (editingIndex === index) {
+      resetForm();
+    } else if (
+      editingIndex !== null &&
+      index < editingIndex
+    ) {
+      setEditingIndex(
+        editingIndex - 1
+      );
+    }
   }
 
 
-  /*
-   * رفتن به مرحله نهایی
-   */
   function handleNext() {
-    /*
-     * اگر Forecast دارای کارشناس است،
-     * حداقل یک کارشناس باید وجود داشته باشد.
-     */
     if (
       hasExpert &&
       experts.length === 0
@@ -318,100 +272,55 @@ export default function ProfileExpertsStep({
       setValidationError(
         "برای این برنامه حداقل یک کارشناس انتخاب کنید."
       );
-
       return;
     }
 
+    const incompleteExpert =
+      experts.find(
+        (expert) =>
+          !expert.expertId ||
+          !expert.topicAxisId ||
+          !isTimeSpan(
+            normalizeDigits(
+              expert.duration
+            )
+          )
+      );
+
+    if (incompleteExpert) {
+      setValidationError(
+        "اطلاعات محور موضوعی و مدت حضور همه کارشناسان را تکمیل کنید."
+      );
+      return;
+    }
 
     setValidationError("");
-
     onNext();
   }
 
 
   return (
     <section
-      className="
-        rounded-xl
-        border border-gray-200
-        bg-white
-        p-5
-        shadow-sm
-      "
+      className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
       dir="rtl"
     >
-      {/* عنوان مرحله */}
-      <header
-        className="
-          mb-6
-          flex
-          flex-wrap
-          items-center
-          justify-between
-          gap-4
-          border-b
-          border-gray-200
-          pb-4
-        "
-      >
-        <div
-          className="
-            flex
-            items-center
-            gap-3
-          "
-        >
-          <div
-            className="
-              flex
-              h-11 w-11
-              items-center
-              justify-center
-              rounded-full
-              bg-blue-50
-              text-[#007fcf]
-            "
-          >
-            <UsersRound
-              size={23}
-            />
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-50 text-[#007fcf]">
+            <UsersRound size={23} />
           </div>
 
-
           <div>
-            <h2
-              className="
-                text-lg
-                font-bold
-                text-gray-800
-              "
-            >
+            <h2 className="text-lg font-bold text-gray-800">
               کارشناسان برنامه
             </h2>
-
-            <p
-              className="
-                mt-1
-                text-sm
-                text-gray-500
-              "
-            >
-              کارشناسان، محور مرتبط و اطلاعات حضور آن‌ها را مشخص کنید.
+            <p className="mt-1 text-sm text-gray-500">
+              کارشناسان پیش‌بینی نمایش داده شده‌اند؛ در صورت نیاز می‌توانید آن‌ها را ویرایش یا جایگزین کنید.
             </p>
           </div>
         </div>
 
-
-        <span
-          className="
-            rounded-full
-            bg-blue-50
-            px-3 py-1
-            text-xs
-            font-bold
-            text-[#007fcf]
-          "
-        >
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#007fcf]">
           {toPersianNumber(
             experts.length
           )}{" "}
@@ -421,77 +330,51 @@ export default function ProfileExpertsStep({
 
 
       {!hasExpert ? (
-        <div
-          className="
-            rounded-xl
-            border border-gray-200
-            bg-gray-50
-            p-6
-            text-center
-            text-sm
-            text-gray-600
-          "
-        >
-          طبق اطلاعات Forecast، این برنامه کارشناس ندارد.
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-600">
+          طبق اطلاعات پیش‌بینی، این برنامه کارشناس ندارد.
         </div>
       ) : (
         <>
-          {/* فرم افزودن کارشناس */}
           <section
-            className="
-              rounded-xl
-              border border-blue-100
-              bg-blue-50/40
-              p-4
-            "
+            id="profile-expert-form"
+            className="rounded-xl border border-blue-100 bg-blue-50/40 p-4"
           >
-            <h3
-              className="
-                mb-4
-                font-bold
-                text-gray-800
-              "
-            >
-              افزودن کارشناس
-            </h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="font-bold text-gray-800">
+                {editingIndex === null
+                  ? "افزودن کارشناس"
+                  : "ویرایش و جایگزینی کارشناس"}
+              </h3>
+
+              {editingIndex !== null && (
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-gray-600 hover:bg-white"
+                >
+                  <X size={16} />
+                  انصراف از ویرایش
+                </button>
+              )}
+            </div>
 
 
-            <div
-              className="
-                grid
-                grid-cols-1
-                gap-4
-                md:grid-cols-2
-                xl:grid-cols-3
-              "
-            >
-              {/* کارشناس */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               <label>
-                <FieldTitle>
-                  کارشناس
-                </FieldTitle>
-
+                <FieldTitle>کارشناس</FieldTitle>
                 <select
-                  value={
-                    formData.expertId
-                  }
-                  disabled={
-                    isExpertsLoading
-                  }
+                  value={formData.expertId}
+                  disabled={isExpertsLoading}
                   onChange={(event) =>
                     setFormData(
                       (previous) => ({
                         ...previous,
-
                         expertId:
-                          event.target
-                            .value,
+                          event.target.value,
                       })
                     )
                   }
-                  className={
-                    inputClassName
-                  }
+                  className={inputClassName}
                 >
                   <option value="">
                     {isExpertsLoading
@@ -499,19 +382,13 @@ export default function ProfileExpertsStep({
                       : "انتخاب کارشناس"}
                   </option>
 
-                  {availableExperts.map(
+                  {selectableExperts.map(
                     (expert) => (
                       <option
-                        key={
-                          expert.id
-                        }
-                        value={
-                          expert.id
-                        }
+                        key={expert.id}
+                        value={expert.id}
                       >
-                        {getExpertName(
-                          expert
-                        )}
+                        {getExpertName(expert)}
                       </option>
                     )
                   )}
@@ -519,31 +396,20 @@ export default function ProfileExpertsStep({
               </label>
 
 
-              {/* محور موضوعی */}
               <label>
-                <FieldTitle>
-                  محور موضوعی
-                </FieldTitle>
-
+                <FieldTitle>محور موضوعی</FieldTitle>
                 <select
-                  value={
-                    formData
-                      .topicAxisId
-                  }
+                  value={formData.topicAxisId}
                   onChange={(event) =>
                     setFormData(
                       (previous) => ({
                         ...previous,
-
                         topicAxisId:
-                          event.target
-                            .value,
+                          event.target.value,
                       })
                     )
                   }
-                  className={
-                    inputClassName
-                  }
+                  className={inputClassName}
                 >
                   <option value="">
                     انتخاب محور
@@ -552,12 +418,8 @@ export default function ProfileExpertsStep({
                   {topicAxes.map(
                     (axis) => (
                       <option
-                        key={
-                          axis.id
-                        }
-                        value={
-                          axis.id
-                        }
+                        key={axis.id}
+                        value={axis.id}
                       >
                         {axis.title}
                       </option>
@@ -567,392 +429,206 @@ export default function ProfileExpertsStep({
               </label>
 
 
-              {/* مدت حضور */}
               <label>
-                <FieldTitle>
-                  مدت حضور
-                </FieldTitle>
-
+                <FieldTitle>مدت حضور</FieldTitle>
                 <input
                   type="text"
                   inputMode="numeric"
                   dir="ltr"
-                  value={
-                    formData.duration
-                  }
+                  value={formData.duration}
                   placeholder="00:15:00"
                   onChange={(event) =>
                     setFormData(
                       (previous) => ({
                         ...previous,
-
                         duration:
-                          event.target
-                            .value,
+                          event.target.value,
                       })
                     )
                   }
-                  className={
-                    inputClassName
-                  }
+                  className={inputClassName}
                 />
               </label>
 
 
-              {/* نحوه حضور */}
               <label>
-                <FieldTitle>
-                  نحوه حضور
-                </FieldTitle>
-
+                <FieldTitle>نحوه حضور</FieldTitle>
                 <select
-                  value={
-                    formData
-                      .attendanceType
-                  }
+                  value={formData.attendanceType}
                   onChange={(event) =>
                     setFormData(
                       (previous) => ({
                         ...previous,
-
                         attendanceType:
                           Number(
-                            event.target
-                              .value
-                          ) as
-                            AttendanceType,
+                            event.target.value
+                          ) as AttendanceType,
                       })
                     )
                   }
-                  className={
-                    inputClassName
-                  }
+                  className={inputClassName}
                 >
-                  {ATTENDANCE_TYPE_OPTIONS
-                    .map(
-                      (option) => (
-                        <option
-                          key={
-                            option.value
-                          }
-                          value={
-                            option.value
-                          }
-                        >
-                          {
-                            option.title
-                          }
-                        </option>
-                      )
-                    )}
+                  {ATTENDANCE_TYPE_OPTIONS.map(
+                    (option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.title}
+                      </option>
+                    )
+                  )}
                 </select>
               </label>
 
 
-              {/* شامل هزینه */}
-              <label
-                className="
-                  flex
-                  min-h-11
-                  items-center
-                  gap-3
-                  self-end
-                  rounded-lg
-                  border border-gray-300
-                  bg-white
-                  px-4 py-2.5
-                "
-              >
+              <label className="flex min-h-11 items-center gap-3 self-end rounded-lg border border-gray-300 bg-white px-4 py-2.5">
                 <input
                   type="checkbox"
-                  checked={
-                    formData
-                      .hasPayment
-                  }
+                  checked={formData.hasPayment}
                   onChange={(event) =>
                     setFormData(
                       (previous) => ({
                         ...previous,
-
                         hasPayment:
-                          event.target
-                            .checked,
+                          event.target.checked,
                       })
                     )
                   }
-                  className="
-                    h-4 w-4
-                    accent-[#007fcf]
-                  "
+                  className="h-4 w-4 accent-[#007fcf]"
                 />
-
-                <span
-                  className="
-                    text-sm
-                    font-semibold
-                    text-gray-700
-                  "
-                >
+                <span className="text-sm font-semibold text-gray-700">
                   شامل هزینه است
                 </span>
               </label>
 
 
-              {/* افزودن */}
               <button
                 type="button"
-                onClick={
-                  addExpert
-                }
-                className="
-                  inline-flex
-                  min-h-11
-                  items-center
-                  justify-center
-                  gap-2
-                  self-end
-                  rounded-lg
-                  bg-[#007fcf]
-                  px-5 py-2.5
-                  font-semibold
-                  text-white
-                  transition
-                  hover:bg-[#006daf]
-                "
+                onClick={saveExpert}
+                className="inline-flex min-h-11 items-center justify-center gap-2 self-end rounded-lg bg-[#007fcf] px-5 py-2.5 font-semibold text-white transition hover:bg-[#006daf]"
               >
-                <Plus size={18} />
-
-                افزودن کارشناس
+                {editingIndex === null ? (
+                  <Plus size={18} />
+                ) : (
+                  <Check size={18} />
+                )}
+                {editingIndex === null
+                  ? "افزودن کارشناس"
+                  : "ذخیره تغییرات"}
               </button>
             </div>
 
 
             {expertsError && (
-              <div
-                className="
-                  mt-4
-                  rounded-lg
-                  border border-red-200
-                  bg-red-50
-                  px-4 py-3
-                  text-sm
-                  text-red-700
-                "
-              >
+              <ErrorMessage>
                 {expertsError}
-              </div>
+              </ErrorMessage>
             )}
           </section>
 
 
-          {/* جدول کارشناسان */}
-          <div
-            className="
-              mt-6
-              overflow-x-auto
-              rounded-xl
-              border border-gray-200
-            "
-          >
-            <table
-              className="
-                w-full
-                min-w-[950px]
-                text-sm
-              "
-            >
-              <thead
-                className="
-                  bg-gray-50
-                  text-gray-700
-                "
-              >
+          <div className="mt-6 overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full min-w-[1000px] text-sm">
+              <thead className="bg-gray-50 text-gray-700">
                 <tr>
-                  <TableHeader>
-                    ردیف
-                  </TableHeader>
-
-                  <TableHeader align="right">
-                    نام کارشناس
-                  </TableHeader>
-
-                  <TableHeader align="right">
-                    محور موضوعی
-                  </TableHeader>
-
-                  <TableHeader>
-                    مدت حضور
-                  </TableHeader>
-
-                  <TableHeader>
-                    نحوه حضور
-                  </TableHeader>
-
-                  <TableHeader>
-                    هزینه
-                  </TableHeader>
-
-                  <TableHeader>
-                    عملیات
-                  </TableHeader>
+                  <TableHeader>ردیف</TableHeader>
+                  <TableHeader align="right">نام کارشناس</TableHeader>
+                  <TableHeader align="right">محور موضوعی</TableHeader>
+                  <TableHeader>مدت حضور</TableHeader>
+                  <TableHeader>نحوه حضور</TableHeader>
+                  <TableHeader>هزینه</TableHeader>
+                  <TableHeader>عملیات</TableHeader>
                 </tr>
               </thead>
 
-
               <tbody>
                 {experts.map(
-                  (
-                    expert,
-                    index
-                  ) => (
+                  (expert, index) => (
                     <tr
-                      key={
-                        `${expert.expertId}` +
-                        `-${expert.topicAxisId}` +
-                        `-${index}`
-                      }
-                      className="
-                        border-t
-                        border-gray-100
-                        text-gray-700
-                        transition
-                        hover:bg-blue-50/40
-                      "
+                      key={`${expert.expertId}-${expert.topicAxisId}-${index}`}
+                      className={`border-t border-gray-100 text-gray-700 transition ${
+                        editingIndex === index
+                          ? "bg-blue-50"
+                          : "hover:bg-blue-50/40"
+                      }`}
                     >
                       <TableCell>
-                        {toPersianNumber(
-                          index + 1
-                        )}
+                        {toPersianNumber(index + 1)}
                       </TableCell>
 
                       <TableCell align="right">
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-2
-                          "
-                        >
-                          <div
-                            className="
-                              flex
-                              h-8 w-8
-                              items-center
-                              justify-center
-                              rounded-full
-                              bg-blue-50
-                              text-[#007fcf]
-                            "
-                          >
-                            <UserRound
-                              size={16}
-                            />
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-[#007fcf]">
+                            <UserRound size={16} />
                           </div>
-
-                          <span
-                            className="
-                              font-semibold
-                              text-gray-800
-                            "
-                          >
-                            {
-                              `${expert.firstName} ${expert.lastName}`
-                                .trim()
-                            }
+                          <span className="font-semibold text-gray-800">
+                            {getProfileExpertName(expert)}
                           </span>
                         </div>
                       </TableCell>
 
                       <TableCell align="right">
-                        {
-                          expert.topicAxisTitle
-                        }
+                        {expert.topicAxisTitle || "تکمیل نشده"}
                       </TableCell>
 
                       <TableCell>
-                        {toPersianNumber(
-                          expert.duration
-                        )}
+                        {expert.duration
+                          ? toPersianNumber(expert.duration)
+                          : "تکمیل نشده"}
                       </TableCell>
 
                       <TableCell>
-                        {
-                          getAttendanceTitle(
-                            expert
-                              .attendanceType
-                          )
-                        }
+                        {getAttendanceTitle(expert.attendanceType)}
                       </TableCell>
 
                       <TableCell>
                         <span
-                          className={`
-                            rounded-full
-                            px-3 py-1
-                            text-xs
-                            font-bold
-                            ${
-                              expert.hasPayment
-                                ? `
-                                    bg-amber-100
-                                    text-amber-700
-                                  `
-                                : `
-                                    bg-gray-100
-                                    text-gray-600
-                                  `
-                            }
-                          `}
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            expert.hasPayment
+                              ? "bg-amber-100 text-amber-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
                         >
-                          {expert.hasPayment
-                            ? "دارد"
-                            : "ندارد"}
+                          {expert.hasPayment ? "دارد" : "ندارد"}
                         </span>
                       </TableCell>
 
                       <TableCell>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            deleteExpert(
-                              index
-                            )
-                          }
-                          className="
-                            inline-flex
-                            items-center
-                            gap-1
-                            rounded-lg
-                            px-3 py-2
-                            text-red-600
-                            transition
-                            hover:bg-red-50
-                          "
-                        >
-                          <Trash2
-                            size={16}
-                          />
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              startEditing(expert, index)
+                            }
+                            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 font-semibold text-[#007fcf] transition hover:bg-blue-50"
+                          >
+                            <Pencil size={16} />
+                            ویرایش
+                          </button>
 
-                          حذف
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteExpert(index)}
+                            className="inline-flex items-center gap-1 rounded-lg px-3 py-2 font-semibold text-red-600 transition hover:bg-red-50"
+                          >
+                            <Trash2 size={16} />
+                            حذف
+                          </button>
+                        </div>
                       </TableCell>
                     </tr>
                   )
                 )}
 
 
-                {experts.length ===
-                  0 && (
+                {experts.length === 0 && (
                   <tr>
                     <td
                       colSpan={7}
-                      className="
-                        p-10
-                        text-center
-                        text-gray-500
-                      "
+                      className="p-10 text-center text-gray-500"
                     >
-                      هنوز کارشناسی اضافه نشده است.
+                      کارشناسی در پیش‌بینی ثبت نشده است؛ از فرم بالا کارشناس اضافه کنید.
                     </td>
                   </tr>
                 )}
@@ -964,85 +640,29 @@ export default function ProfileExpertsStep({
 
 
       {validationError && (
-        <div
-          className="
-            mt-5
-            rounded-lg
-            border border-red-200
-            bg-red-50
-            px-4 py-3
-            text-sm
-            text-red-700
-          "
-        >
+        <ErrorMessage>
           {validationError}
-        </div>
+        </ErrorMessage>
       )}
 
 
-      {/* دکمه‌های مراحل */}
-      <footer
-        className="
-          mt-8
-          flex
-          items-center
-          justify-between
-          gap-3
-          border-t
-          border-gray-200
-          pt-5
-        "
-      >
+      <footer className="mt-8 flex items-center justify-between gap-3 border-t border-gray-200 pt-5">
         <button
           type="button"
-          onClick={
-            onBack
-          }
-          className="
-            inline-flex
-            items-center
-            gap-2
-            rounded-lg
-            border border-gray-300
-            bg-white
-            px-5 py-2.5
-            font-semibold
-            text-gray-700
-            transition
-            hover:bg-gray-50
-          "
+          onClick={onBack}
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-5 py-2.5 font-semibold text-gray-700 transition hover:bg-gray-50"
         >
-          <ArrowRight
-            size={18}
-          />
-
+          <ArrowRight size={18} />
           مرحله قبل
         </button>
 
-
         <button
           type="button"
-          onClick={
-            handleNext
-          }
-          className="
-            inline-flex
-            items-center
-            gap-2
-            rounded-lg
-            bg-[#007fcf]
-            px-6 py-2.5
-            font-semibold
-            text-white
-            transition
-            hover:bg-[#006daf]
-          "
+          onClick={handleNext}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#007fcf] px-6 py-2.5 font-semibold text-white transition hover:bg-[#006daf]"
         >
           مرحله بعد
-
-          <ArrowLeft
-            size={18}
-          />
+          <ArrowLeft size={18} />
         </button>
       </footer>
     </section>
@@ -1050,18 +670,98 @@ export default function ProfileExpertsStep({
 }
 
 
+function createEmptyForm(
+  topicAxes: ProfileTopicAxisOption[]
+): ExpertFormData {
+  return {
+    expertId: "",
+    topicAxisId:
+      topicAxes.length === 1
+        ? topicAxes[0].id
+        : "",
+    duration: "00:15:00",
+    attendanceType: 1,
+    hasPayment: false,
+  };
+}
+
+
+function validateExpertForm(
+  formData: ExpertFormData,
+  experts: ProfileExpertOption[],
+  topicAxes: ProfileTopicAxisOption[]
+): string | null {
+  if (!formData.expertId) {
+    return "انتخاب کارشناس الزامی است.";
+  }
+
+  if (!experts.some(
+    (expert) =>
+      expert.id === formData.expertId
+  )) {
+    return "اطلاعات کارشناس انتخاب‌شده پیدا نشد.";
+  }
+
+  if (!formData.topicAxisId) {
+    return "انتخاب محور موضوعی الزامی است.";
+  }
+
+  if (!topicAxes.some(
+    (axis) =>
+      axis.id === formData.topicAxisId
+  )) {
+    return "اطلاعات محور موضوعی انتخاب‌شده پیدا نشد.";
+  }
+
+  if (!isTimeSpan(
+    normalizeDigits(
+      formData.duration.trim()
+    )
+  )) {
+    return "مدت حضور باید با فرمت hh:mm:ss وارد شود.";
+  }
+
+  return null;
+}
+
+
+function mergeAvailableWithSelected(
+  availableExperts: ProfileExpertOption[],
+  selectedExperts: ProfileExpertData[]
+): ProfileExpertOption[] {
+  const result =
+    new Map<string, ProfileExpertOption>();
+
+  for (const expert of availableExperts) {
+    if (expert.id) {
+      result.set(expert.id, expert);
+    }
+  }
+
+  for (const expert of selectedExperts) {
+    if (
+      expert.expertId &&
+      !result.has(expert.expertId)
+    ) {
+      result.set(
+        expert.expertId,
+        {
+          id: expert.expertId,
+          firstName: expert.firstName,
+          lastName: expert.lastName,
+        }
+      );
+    }
+  }
+
+  return Array.from(result.values());
+}
+
+
 const inputClassName = `
-  w-full
-  min-h-11
-  rounded-lg
-  border border-gray-300
-  bg-white
-  px-3 py-2.5
-  outline-none
-  transition
-  focus:border-[#007fcf]
-  focus:ring-2
-  focus:ring-[#007fcf]/10
+  min-h-11 w-full rounded-lg border border-gray-300 bg-white
+  px-3 py-2.5 outline-none transition
+  focus:border-[#007fcf] focus:ring-2 focus:ring-[#007fcf]/10
   disabled:bg-gray-100
 `;
 
@@ -1069,30 +769,26 @@ const inputClassName = `
 function FieldTitle({
   children,
 }: {
-  children:
-    React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <span
-      className="
-        mb-2
-        block
-        text-sm
-        font-semibold
-        text-gray-700
-      "
-    >
+    <span className="mb-2 block text-sm font-semibold text-gray-700">
       {children}
-
-      <span
-        className="
-          mr-1
-          text-red-500
-        "
-      >
-        *
-      </span>
+      <span className="mr-1 text-red-500">*</span>
     </span>
+  );
+}
+
+
+function ErrorMessage({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+      {children}
+    </div>
   );
 }
 
@@ -1101,24 +797,16 @@ function TableHeader({
   children,
   align = "center",
 }: {
-  children:
-    React.ReactNode;
-
-  align?:
-    "right" | "center";
+  children: ReactNode;
+  align?: "right" | "center";
 }) {
   return (
     <th
-      className={`
-        whitespace-nowrap
-        px-4 py-4
-        font-bold
-        ${
-          align === "right"
-            ? "text-right"
-            : "text-center"
-        }
-      `}
+      className={`whitespace-nowrap px-4 py-4 font-bold ${
+        align === "right"
+          ? "text-right"
+          : "text-center"
+      }`}
     >
       {children}
     </th>
@@ -1130,23 +818,16 @@ function TableCell({
   children,
   align = "center",
 }: {
-  children:
-    React.ReactNode;
-
-  align?:
-    "right" | "center";
+  children: ReactNode;
+  align?: "right" | "center";
 }) {
   return (
     <td
-      className={`
-        whitespace-nowrap
-        px-4 py-4
-        ${
-          align === "right"
-            ? "text-right"
-            : "text-center"
-        }
-      `}
+      className={`whitespace-nowrap px-4 py-4 ${
+        align === "right"
+          ? "text-right"
+          : "text-center"
+      }`}
     >
       {children}
     </td>
@@ -1155,8 +836,18 @@ function TableCell({
 
 
 function getExpertName(
-  expert:
-    ProfileExpertOption
+  expert: ProfileExpertOption
+): string {
+  return (
+    `${expert.firstName} ${expert.lastName}`
+      .trim() ||
+    "کارشناس بدون نام"
+  );
+}
+
+
+function getProfileExpertName(
+  expert: ProfileExpertData
 ): string {
   return (
     `${expert.firstName} ${expert.lastName}`
@@ -1167,18 +858,13 @@ function getExpertName(
 
 
 function getAttendanceTitle(
-  attendanceType:
-    AttendanceType
+  attendanceType: AttendanceType
 ): string {
   return (
-    ATTENDANCE_TYPE_OPTIONS
-      .find(
-        (option) =>
-          option.value ===
-          attendanceType
-      )
-      ?.title ??
-    "نامشخص"
+    ATTENDANCE_TYPE_OPTIONS.find(
+      (option) =>
+        option.value === attendanceType
+    )?.title ?? "نامشخص"
   );
 }
 
@@ -1186,10 +872,7 @@ function getAttendanceTitle(
 function isTimeSpan(
   value: string
 ): boolean {
-  return (
-    /^\d{2,}:[0-5]\d:[0-5]\d$/
-      .test(value)
-  );
+  return /^\d{2,}:[0-5]\d:[0-5]\d$/.test(value);
 }
 
 
@@ -1199,9 +882,7 @@ function toPersianNumber(
   return String(value).replace(
     /\d/g,
     (digit) =>
-      "۰۱۲۳۴۵۶۷۸۹"[
-        Number(digit)
-      ]
+      "۰۱۲۳۴۵۶۷۸۹"[Number(digit)]
   );
 }
 
@@ -1211,28 +892,22 @@ function normalizeDigits(
 ): string {
   const persianDigits =
     "۰۱۲۳۴۵۶۷۸۹";
-
   const arabicDigits =
     "٠١٢٣٤٥٦٧٨٩";
-
 
   return value
     .replace(
       /[۰-۹]/g,
       (digit) =>
         String(
-          persianDigits.indexOf(
-            digit
-          )
+          persianDigits.indexOf(digit)
         )
     )
     .replace(
       /[٠-٩]/g,
       (digit) =>
         String(
-          arabicDigits.indexOf(
-            digit
-          )
+          arabicDigits.indexOf(digit)
         )
     );
 }

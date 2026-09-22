@@ -736,15 +736,13 @@ function validateSpecifications(
     return "شناسه شبکه معتبر نیست.";
   }
 
-
-  if (
-    !Number.isInteger(
-      data.networkGroupId
-    ) ||
-    data.networkGroupId <= 0
-  ) {
-    return "شناسه گروه برنامه‌ساز معتبر نیست.";
-  }
+if (
+  data.networkGroupId === null ||
+  !Number.isInteger(data.networkGroupId) ||
+  data.networkGroupId <= 0
+) {
+  return "شناسه گروه برنامه‌ساز معتبر نیست.";
+}
 
 
   if (!data.mainTopic.trim()) {

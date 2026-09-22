@@ -47,6 +47,7 @@ import type {
   ProgramProfileListResponse,
   ProgramProfilePagination,
   ProgramProfileResponse,
+  ProgramProfileStatus,
 } from "@/app/types/program-profile";
 
 
@@ -467,6 +468,21 @@ export default function ProgramProfilesPage() {
       return;
     }
 
+    /*
+     * طبق گردش‌کار Backend فقط شناسنامه‌های پیش‌نویس
+     * یا بازگشتی برای اصلاح قابل ارسال مجدد هستند.
+     * این کنترل علاوه بر مخفی‌کردن دکمه، از ارسال وضعیت
+     * منقضی یا تغییریافته نیز جلوگیری می‌کند.
+     */
+    if (!canSubmitProfile(submitProfile)) {
+      setSubmitProfile(null);
+      setError(
+        "این شناسنامه در وضعیت قابل ارسال قرار ندارد."
+      );
+
+      return;
+    }
+
 
     try {
       setIsSubmitting(true);
@@ -863,19 +879,20 @@ export default function ProgramProfilesPage() {
                   border-collapse
                 "
               >
-                <colgroup>
+                  <colgroup>
                     <col className="w-[4%]" />
-                    <col className="w-[17%]" />
-                    <col className="w-[13%]" />
+                    <col className="w-[14%]" />
+                    <col className="w-[12%]" />
                     <col className="w-[8%]" />
-                    <col className="w-[7%]" />
-                    <col className="w-[7%]" />
+                    <col className="w-[6%]" />
                     <col className="w-[7%]" />
                     <col className="w-[7%]" />
                     <col className="w-[7%]" />
                     <col className="w-[6%]" />
+                    <col className="w-[6%]" />
                     <col className="w-[7%]" />
-                    <col className="w-[7%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[6%]" />
                   </colgroup>
                 <thead>
                   <tr
@@ -928,6 +945,10 @@ export default function ProgramProfilesPage() {
 
                     <th className={headerClass}>
                       ساختار
+                    </th>
+
+                    <th className={headerClass}>
+                      وضعیت
                     </th>
 
                     {/* <th className={headerClass}>
@@ -1047,6 +1068,18 @@ export default function ProgramProfilesPage() {
                           {profile.programStructureName}
                         </td>
 
+                        <td className={cellClass}>
+                          <span
+                            className={getStatusBadgeClass(
+                              profile.status
+                            )}
+                          >
+                            {getProfileStatusTitle(
+                              profile
+                            )}
+                          </span>
+                        </td>
+
                         {/* <td className={cellClass}>
                           {profile.createdByUserName ||
                             "—"}
@@ -1154,34 +1187,37 @@ export default function ProgramProfilesPage() {
                                   مشاهده
                                 </button>
 
+                                {canSubmitProfile(
+                                  profile
+                                ) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      setError("");
+                                      setSuccessMessage("");
+                                      setSubmitProfile(
+                                        profile
+                                      );
+                                    }}
+                                    className="
+                                      flex
+                                      w-full
+                                      items-center
+                                      gap-2
+                                      px-4 py-2.5
+                                      text-right
+                                      text-sm
+                                      text-[#007fcf]
+                                      transition
+                                      hover:bg-blue-50
+                                    "
+                                  >
+                                    <Send size={17} />
 
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setOpenMenuId(null);
-                                    setError("");
-                                    setSuccessMessage("");
-                                    setSubmitProfile(
-                                      profile
-                                    );
-                                  }}
-                                  className="
-                                    flex
-                                    w-full
-                                    items-center
-                                    gap-2
-                                    px-4 py-2.5
-                                    text-right
-                                    text-sm
-                                    text-[#007fcf]
-                                    transition
-                                    hover:bg-blue-50
-                                  "
-                                >
-                                  <Send size={17} />
-
-                                  ارسال برای مدیر
-                                </button>
+                                    ارسال برای مدیر گروه
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1968,6 +2004,158 @@ function getErrorMessage(
   }
 
   return null;
+}
+
+
+/*
+ * تنها وضعیت‌های مجاز برای ورود به چرخه بررسی.
+ */
+function canSubmitProfile(
+  profile: ProgramProfileResponse
+): boolean {
+  const normalizedStatus =
+    normalizeProfileStatus(
+      profile.status
+    );
+
+  /*
+   * پشتیبانی از نام‌های احتمالی Enum در Backend
+   */
+  const isDraftStatus =
+    normalizedStatus === "draft" ||
+    normalizedStatus === "draftatprovider";
+
+  const isReturnedStatus =
+    normalizedStatus === "returnedforedit";
+
+  if (
+    isDraftStatus ||
+    isReturnedStatus
+  ) {
+    return true;
+  }
+
+  /*
+   * پشتیبانی از statusDisplayName فارسی Backend
+   *
+   * نمونه:
+   * پیش‌نویس (نزد تهیه‌کننده)
+   */
+  const normalizedDisplayName =
+    normalizePersianStatusTitle(
+      profile.statusDisplayName
+    );
+
+  return (
+    normalizedDisplayName.startsWith(
+      "پیش نویس"
+    ) ||
+    normalizedDisplayName.includes(
+      "بازگشت برای اصلاح"
+    ) ||
+    normalizedDisplayName.includes(
+      "برگشت برای اصلاح"
+    )
+  );
+}
+
+
+function normalizeProfileStatus(
+  status: unknown
+): string {
+  if (typeof status !== "string") {
+    return "";
+  }
+
+  return status
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+}
+
+
+function normalizePersianStatusTitle(
+  value: unknown
+): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .trim()
+    .replace(/\u200c/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+const PROFILE_STATUS_TITLES:
+  Record<ProgramProfileStatus, string> = {
+  Draft:
+    "پیش‌نویس",
+
+  PendingGroupManager:
+    "در انتظار مدیر گروه",
+
+  PendingSupervisor:
+    "در انتظار ناظر",
+
+  PendingBroadcastManager:
+    "در انتظار مدیر پخش",
+
+  PendingPlanningManager:
+    "در انتظار مدیر طرح و برنامه",
+
+  Approved:
+    "تأیید نهایی",
+
+  ReturnedForEdit:
+    "بازگشت برای اصلاح",
+};
+
+
+function getProfileStatusTitle(
+  profile: ProgramProfileResponse
+): string {
+  const backendTitle =
+    typeof profile.statusDisplayName === "string"
+      ? profile.statusDisplayName.trim()
+      : "";
+
+  return (
+    backendTitle ||
+    PROFILE_STATUS_TITLES[
+      profile.status
+    ] ||
+    profile.status ||
+    "نامشخص"
+  );
+}
+
+
+function getStatusBadgeClass(
+  status: ProgramProfileStatus
+): string {
+  const baseClass =
+    "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold";
+
+  switch (status) {
+    case "Draft":
+      return `${baseClass} bg-gray-100 text-gray-700`;
+
+    case "ReturnedForEdit":
+      return `${baseClass} bg-red-100 text-red-700`;
+
+    case "Approved":
+      return `${baseClass} bg-green-100 text-green-700`;
+
+    case "PendingGroupManager":
+    case "PendingSupervisor":
+    case "PendingBroadcastManager":
+    case "PendingPlanningManager":
+      return `${baseClass} bg-amber-100 text-amber-800`;
+
+    default:
+      return `${baseClass} bg-gray-100 text-gray-700`;
+  }
 }
 
 

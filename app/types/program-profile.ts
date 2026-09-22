@@ -56,6 +56,34 @@ export const ATTENDANCE_TYPE_OPTIONS:
 
 
 /*
+ * نوع برنامه طبق مستند Backend
+ *
+ * 10 = زنده
+ * 20 = ضبطی یا تولیدی
+ */
+export type ProgramType =
+  | 10
+  | 20;
+
+
+export interface ProgramTypeOption {
+  value:
+    ProgramType;
+
+  title:
+    string;
+}
+
+export type ProgramProfileStatus =
+  | "Draft"
+  | "PendingGroupManager"
+  | "PendingSupervisor"
+  | "PendingBroadcastManager"
+  | "PendingPlanningManager"
+  | "Approved"
+  | "ReturnedForEdit";
+
+/*
  * اطلاعات مرحله اول ویزارد:
  * مشخصات شناسنامه برنامه
  */
@@ -129,6 +157,13 @@ export interface ProfileSpecificationsData {
   productionMethod:
     string;
 
+
+  programType:
+  ProgramType;
+
+  programTypeName:
+  string;
+
   occasion:
     string;
 
@@ -162,6 +197,8 @@ export interface ProfileSpecificationsData {
    */
   hasExpert:
     boolean;
+
+  
 }
 
 
@@ -412,7 +449,12 @@ export interface IssueProgramProfileRequest {
     IssueProfileCrewMemberRequest[];
 
   items:
-    IssueProfileItemRequest[];
+  IssueProfileItemRequest[];
+    programType:
+  ProgramType;
+
+programTypeName:
+  string;
 }
 
 
@@ -460,6 +502,9 @@ export interface UpdateProfileExpertsRequest {
  * عامل ثبت‌شده در پاسخ شناسنامه
  */
 export interface ProfileCrewMemberResponse {
+  id:
+    string;
+
   personnelId:
     number;
 
@@ -485,17 +530,11 @@ export interface ProfileCrewMemberResponse {
  * به همین علت اختیاری تعریف شده‌اند.
  */
 export interface ProfileItemResponse {
-  itemId?:
-    number | null;
+  id:
+    string;
 
   itemName:
     string;
-
-  itemSubject?:
-    string;
-
-  productionTypeId?:
-    number | null;
 
   productionType:
     string;
@@ -509,6 +548,9 @@ export interface ProfileItemResponse {
  * کارشناس ثبت‌شده در پاسخ شناسنامه
  */
 export interface ProfileExpertResponse {
+  id:
+    string;
+
   expertId:
     string;
 
@@ -518,10 +560,6 @@ export interface ProfileExpertResponse {
   duration:
     string;
 
-  /*
-   * Backend ممکن است Enum را
-   * به شکل رشته یا عدد برگرداند.
-   */
   attendanceType:
     AttendanceType | string;
 
@@ -568,7 +606,23 @@ export interface ProgramProfileResponse {
   productionMethod:
     string;
 
-  occasion:
+
+programType:
+  ProgramType;
+
+programTypeName:
+  string;
+
+status:
+  ProgramProfileStatus;
+
+statusDisplayName:
+  string;
+
+lastModifiedDate?:
+  string | null;
+
+ occasion:
     string;
 
   floorId:
@@ -685,4 +739,45 @@ export interface ProgramProfileApiError {
 
   details?:
     unknown;
+}
+
+
+
+/*
+ * نظر ثبت‌شده توسط ناظر شناسنامه
+ */
+export interface SupervisorCommentResponse {
+  id:
+    string;
+
+  supervisorUserId:
+    string;
+
+  supervisorName:
+    string;
+
+  comment:
+    string;
+
+  createdDate:
+    string;
+}
+
+
+/*
+ * پاسخ یکپارچه Route داخلی Frontend
+ * برای فهرست نظرات ناظر
+ */
+export interface SupervisorCommentListResponse {
+  items:
+    SupervisorCommentResponse[];
+}
+
+
+/*
+ * بدنه ثبت نظر ناظر
+ */
+export interface CreateSupervisorCommentRequest {
+  comment:
+    string;
 }

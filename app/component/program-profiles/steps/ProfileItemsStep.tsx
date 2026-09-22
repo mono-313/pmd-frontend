@@ -19,6 +19,22 @@ import type {
 } from "@/app/types/program-profile";
 
 
+/*
+ * مقادیر مجاز productionType طبق مستند وب‌سرویس.
+ * مقدار value مستقیماً در درخواست صدور شناسنامه ارسال می‌شود.
+ */
+const PRODUCTION_TYPE_OPTIONS = [
+  {
+    value: "زنده",
+    title: "زنده",
+  },
+  {
+    value: "ضبطی",
+    title: "ضبطی",
+  },
+] as const;
+
+
 interface ProfileItemsStepProps {
   /*
    * آیتم‌های موجود در FormData
@@ -520,8 +536,7 @@ export default function ProfileItemsStep({
                         px-4 py-4
                       "
                     >
-                      <input
-                        type="text"
+                      <select
                         value={
                           item.productionType
                         }
@@ -531,7 +546,6 @@ export default function ProfileItemsStep({
                             event.target.value
                           )
                         }
-                        placeholder="نوع تولید را وارد کنید"
                         aria-label={
                           `نوع تولید آیتم ${index + 1}`
                         }
@@ -546,7 +560,6 @@ export default function ProfileItemsStep({
                           text-gray-700
                           outline-none
                           transition
-                          placeholder:text-gray-400
                           focus:ring-2
                           focus:ring-blue-100
                           ${
@@ -556,7 +569,22 @@ export default function ProfileItemsStep({
                               : "border-gray-300 focus:border-[#007fcf]"
                           }
                         `}
-                      />
+                      >
+                        <option value="">
+                          انتخاب نوع تولید
+                        </option>
+
+                        {PRODUCTION_TYPE_OPTIONS.map(
+                          (option) => (
+                            <option
+                              key={option.value}
+                              value={option.value}
+                            >
+                              {option.title}
+                            </option>
+                          )
+                        )}
+                      </select>
                     </td>
 
 

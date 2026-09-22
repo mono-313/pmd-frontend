@@ -142,6 +142,8 @@ export interface ForecastResponse {
 
   lastActionReason?:
     string | null;
+
+  
 }
 
 
@@ -206,6 +208,15 @@ export interface Forecast
    */
   rejectionReason?:
     string | null;
+//  مدیر آخرین عملیات
+reviewedByUserId?:
+  string | null;
+
+lastActionReason?:
+  string | null;
+
+lastModifiedDate?:
+  string | null;  
 }
 
 
