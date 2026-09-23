@@ -5,6 +5,10 @@ import {
 } from "react";
 
 import {
+  useRouter,
+} from "next/navigation";
+
+import {
   AlertCircle,
   CheckCircle2,
   CheckSquare,
@@ -53,6 +57,9 @@ export default function FinalReviewStep({
   onBack,
   onEditStep,
 }: FinalReviewStepProps) {
+  const router =
+    useRouter();
+
   const [
     showConfirmModal,
     setShowConfirmModal,
@@ -375,6 +382,17 @@ async function handleFinalSubmit() {
 
     setTrackingId(
       responseData.forecast.id
+    );
+
+    /*
+     * پس از ثبت موفق، شناسه پیش‌بینی جدید به
+     * صفحه فهرست ارسال می‌شود تا همان ردیف
+     * مشخص و در مرکز صفحه نمایش داده شود.
+     */
+    router.replace(
+      `/forecasts?focusId=${encodeURIComponent(
+        responseData.forecast.id
+      )}`
     );
   } catch (error) {
     console.error(

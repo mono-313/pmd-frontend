@@ -1,13 +1,21 @@
 "use client";
 
 import {
-  useState,ReactNode
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import type {
+  ReactNode,
 } from "react";
 
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
 } from "lucide-react";
 
@@ -65,6 +73,71 @@ export default function ProfileSpecificationsStep({
     validationError,
     setValidationError,
   ] = useState("");
+
+  const [
+    isDurationOpen,
+    setIsDurationOpen,
+  ] = useState(false);
+
+  const durationPickerRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
+  const durationInputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const [
+    durationDraft,
+    setDurationDraft,
+  ] = useState(
+    data.duration
+  );
+
+  useEffect(() => {
+    if (
+      document.activeElement !==
+      durationInputRef.current
+    ) {
+      setDurationDraft(
+        data.duration
+      );
+    }
+  }, [data.duration]);
+
+  useEffect(() => {
+    if (!isDurationOpen) {
+      return;
+    }
+
+    function closeDurationPicker(
+      event: MouseEvent
+    ) {
+      const target =
+        event.target as Node;
+
+      if (
+        !durationPickerRef.current
+          ?.contains(target)
+      ) {
+        setIsDurationOpen(false);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      closeDurationPicker
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        closeDurationPicker
+      );
+    };
+  }, [isDurationOpen]);
 
 
   /*
@@ -125,7 +198,7 @@ export default function ProfileSpecificationsStep({
         rounded-xl
         border border-gray-200
         bg-white
-        p-5
+        p-4
         shadow-sm
       "
       dir="rtl"
@@ -133,10 +206,10 @@ export default function ProfileSpecificationsStep({
       {/* عنوان مرحله */}
       <header
         className="
-          mb-6
+          mb-4
           border-b
           border-gray-200
-          pb-4
+          pb-3
         "
       >
         <div
@@ -205,7 +278,8 @@ export default function ProfileSpecificationsStep({
           className="
             grid
             grid-cols-1
-            gap-5
+            gap-x-5
+            gap-y-3
             md:grid-cols-2
             xl:grid-cols-3
           "
@@ -300,15 +374,15 @@ export default function ProfileSpecificationsStep({
       {/* اطلاعات قابل تکمیل */}
       <div
         className="
-          mt-8
+          mt-5
           border-t
           border-gray-200
-          pt-6
+          pt-4
         "
       >
         <h3
           className="
-            mb-4
+            mb-3
             font-bold
             text-gray-700
           "
@@ -321,12 +395,12 @@ export default function ProfileSpecificationsStep({
           className="
             grid
             grid-cols-1
-            gap-5
+            gap-4
             md:grid-cols-2
           "
         >
           {/* مدت برنامه */}
-          <label className="block">
+          <div className="block">
             <span
               className="
                 mb-2
@@ -349,47 +423,79 @@ export default function ProfileSpecificationsStep({
             </span>
 
 
-            <div className="relative">
+            <div
+              ref={durationPickerRef}
+              className="relative"
+            >
               <Clock3
                 size={18}
                 className="
                   pointer-events-none
                   absolute
                   right-3
-                  top-1/2
+                  top-[22px]
                   -translate-y-1/2
                   text-gray-400
                 "
               />
 
-
               <input
+                ref={durationInputRef}
                 type="text"
-                inputMode="numeric"
-                list="program-duration-options"
-                value={
-                  data.duration
+                inputMode="text"
+                value={durationDraft}
+                maxLength={8}
+                placeholder="01:30:00"
+                onFocus={(event) =>
+                  event.currentTarget.select()
                 }
-                onChange={(event) =>
+                onChange={(event) => {
+                  const nextValue =
+                    normalizeEditableTime(
+                      event.target.value
+                    );
+
+                  setDurationDraft(
+                    nextValue
+                  );
+
                   updateField(
                     "duration",
+                    nextValue
+                  );
+                }}
+                onBlur={() => {
+                  const normalized =
+                    normalizeDurationDraft(
+                      durationDraft
+                    );
 
-                    normalizeTimeInput(
-                      event.target.value
-                    )
-                  )
-                }
-                placeholder="01:00:00"
-                maxLength={10}
+                  setDurationDraft(
+                    normalized
+                  );
+
+                  updateField(
+                    "duration",
+                    normalized
+                  );
+                }}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter"
+                  ) {
+                    event.currentTarget.blur();
+                  }
+                }}
                 dir="ltr"
                 className="
+                  h-11
                   w-full
                   rounded-lg
                   border border-gray-300
                   bg-white
-                  py-2.5
-                  pl-3 pr-10
-                  text-left
+                  pl-11 pr-10
+                  text-center
+                  font-semibold
                   outline-none
                   transition
                   focus:border-[#007fcf]
@@ -398,40 +504,120 @@ export default function ProfileSpecificationsStep({
                 "
               />
 
-
-              <datalist
-                id="program-duration-options"
-              >
-                {PROGRAM_DURATION_OPTIONS.map(
-                  (duration) => (
-                    <option
-                      key={duration}
-                      value={duration}
-                    >
-                      {formatDurationLabel(
-                        duration
-                      )}
-                    </option>
+              <button
+                type="button"
+                onMouseDown={(event) =>
+                  event.preventDefault()
+                }
+                onClick={() =>
+                  setIsDurationOpen(
+                    (previous) =>
+                      !previous
                   )
-                )}
-              </datalist>
+                }
+                aria-label="نمایش مدت‌های پیشنهادی"
+                aria-haspopup="listbox"
+                aria-expanded={isDurationOpen}
+                className="
+                  absolute
+                  left-1.5 top-1.5
+                  flex h-8 w-8
+                  items-center
+                  justify-center
+                  rounded-md
+                  text-gray-400
+                  transition
+                  hover:bg-gray-100
+                  hover:text-[#007fcf]
+                "
+              >
+                <ChevronDown
+                  size={18}
+                  className={`
+                    text-gray-400
+                    transition-transform
+                    ${
+                      isDurationOpen
+                        ? "rotate-180"
+                        : ""
+                    }
+                  `}
+                />
+
+              </button>
+
+              {isDurationOpen && (
+                <div
+                  role="listbox"
+                  className="
+                    absolute
+                    left-0 right-0
+                    top-full
+                    z-40
+                    mt-2
+                    max-h-40
+                    overflow-y-auto
+                    rounded-lg
+                    border border-gray-200
+                    bg-white
+                    p-1.5
+                    shadow-xl
+                  "
+                >
+                  {PROGRAM_DURATION_OPTIONS.map(
+                    (duration) => (
+                      <button
+                        key={duration}
+                        type="button"
+                        role="option"
+                        aria-selected={
+                          data.duration ===
+                          duration
+                        }
+                        onClick={() => {
+                          updateField(
+                            "duration",
+                            duration
+                          );
+
+                          setDurationDraft(
+                            duration
+                          );
+
+                          setIsDurationOpen(
+                            false
+                          );
+                        }}
+                        dir="ltr"
+                        className={`
+                          block
+                          w-full
+                          rounded-md
+                          px-3 py-2
+                          text-center
+                          text-sm
+                          transition
+                          ${
+                            data.duration ===
+                            duration
+                              ? "bg-blue-50 font-bold text-[#007fcf]"
+                              : "text-gray-700 hover:bg-gray-100"
+                          }
+                        `}
+                      >
+                        {duration}
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
             </div>
 
-
-            <p
-              className="
-                mt-2
-                text-xs
-                text-gray-500
-              "
-            >
-              یک مدت پیشنهادی را انتخاب کنید یا مدت دلخواه را با فرمت ساعت:دقیقه:ثانیه وارد کنید؛ مانند 01:30:00.
-            </p>
-          </label>
+          </div>
 
 
           {/* ساعت شروع */}
-          <label className="block">
+          <div className="block">
             <span
               className="
                 mb-2
@@ -454,75 +640,95 @@ export default function ProfileSpecificationsStep({
             </span>
 
 
-            <div className="relative">
+            <div
+              className="
+                flex h-11
+                items-center
+                justify-center
+                gap-2
+                rounded-lg
+                border border-gray-300
+                bg-white
+                px-3
+                transition
+                focus-within:border-[#007fcf]
+                focus-within:ring-2
+                focus-within:ring-[#007fcf]/10
+              "
+              dir="ltr"
+            >
               <Clock3
                 size={18}
-                className="
-                  pointer-events-none
-                  absolute
-                  right-3
-                  top-1/2
-                  -translate-y-1/2
-                  text-gray-400
-                "
+                className="shrink-0 text-gray-400"
               />
 
+              <span className="text-xs text-gray-500">
+                ساعت
+              </span>
 
-              <input
-                type="time"
-                step="1"
+              <TimePartInput
+                label="ساعت"
                 value={
-                  data.startTime
+                  getClockParts(
+                    data.startTime
+                  ).hours
                 }
-                onChange={(event) =>
+                max={23}
+                onChange={(hours) =>
                   updateField(
                     "startTime",
-
-                    normalizeTimeInput(
-                      event.target.value
+                    buildClockTime(
+                      hours,
+                      getClockParts(
+                        data.startTime
+                      ).minutes
                     )
                   )
                 }
-                dir="ltr"
-                className="
-                  w-full
-                  rounded-lg
-                  border border-gray-300
-                  bg-white
-                  py-2.5
-                  pl-3 pr-10
-                  text-left
-                  outline-none
-                  transition
-                  focus:border-[#007fcf]
-                  focus:ring-2
-                  focus:ring-[#007fcf]/10
-                "
+              />
+
+              <span className="text-lg font-bold text-gray-500">
+                :
+              </span>
+
+              <span className="text-xs text-gray-500">
+                دقیقه
+              </span>
+
+              <TimePartInput
+                label="دقیقه"
+                value={
+                  getClockParts(
+                    data.startTime
+                  ).minutes
+                }
+                max={59}
+                onChange={(minutes) =>
+                  updateField(
+                    "startTime",
+                    buildClockTime(
+                      getClockParts(
+                        data.startTime
+                      ).hours,
+                      minutes
+                    )
+                  )
+                }
               />
             </div>
 
-
-            <p
-              className="
-                mt-2
-                text-xs
-                text-gray-500
-              "
-            >
-              ساعت شروع پخش برنامه را مشخص کنید.
-            </p>
-          </label>
+          </div>
         </div>
 
 
         {/* وضعیت کارشناس */}
         <div
           className="
-            mt-5
+            mt-3
             rounded-xl
             border border-blue-100
             bg-blue-50/60
-            p-4
+            p-3
           "
         >
           <label
@@ -562,7 +768,7 @@ export default function ProfileSpecificationsStep({
                   mt-1
                   block
                   text-xs
-                  leading-6
+                  leading-5
                   text-gray-500
                 "
               >
@@ -578,7 +784,7 @@ export default function ProfileSpecificationsStep({
       {validationError && (
         <div
           className="
-            mt-6
+            mt-3
             rounded-lg
             border border-red-200
             bg-red-50
@@ -595,12 +801,12 @@ export default function ProfileSpecificationsStep({
       {/* دکمه مرحله بعد */}
       <footer
         className="
-          mt-8
+          mt-4
           flex
           justify-end
           border-t
           border-gray-200
-          pt-5
+          pt-3
         "
       >
         <button
@@ -669,7 +875,7 @@ function ReadOnlyField({
     <div>
       <div
         className="
-          mb-2
+          mb-1
           flex
           items-center
           gap-2
@@ -688,11 +894,11 @@ function ReadOnlyField({
 
       <div
         className="
-          min-h-11
+          min-h-9
           rounded-lg
           border border-gray-200
           bg-gray-100
-          px-3 py-2.5
+          px-3 py-2
           text-sm
           font-semibold
           text-gray-700
@@ -702,6 +908,372 @@ function ReadOnlyField({
       </div>
     </div>
   );
+}
+
+
+interface TimePartInputProps {
+  label:
+    string;
+
+  value:
+    number;
+
+  max:
+    number;
+
+  onChange: (
+    value: number
+  ) => void;
+}
+
+
+/*
+ * ورودی ساعت یا دقیقه با امکان:
+ * ورود دستی، افزایش و کاهش با دکمه‌ها.
+ */
+function TimePartInput({
+  label,
+  value,
+  max,
+  onChange,
+}: TimePartInputProps) {
+  const inputRef =
+    useRef<HTMLInputElement | null>(
+      null
+    );
+
+  const [
+    draftValue,
+    setDraftValue,
+  ] = useState(
+    String(value).padStart(
+      2,
+      "0"
+    )
+  );
+
+  useEffect(() => {
+    if (
+      document.activeElement !==
+      inputRef.current
+    ) {
+      setDraftValue(
+        String(value).padStart(
+          2,
+          "0"
+        )
+      );
+    }
+  }, [value]);
+
+  function commitDraftValue() {
+    const normalized =
+      normalizeDigits(
+        draftValue
+      ).replace(/\D/g, "");
+
+    const nextValue =
+      normalized
+        ? Math.min(
+            Number(normalized),
+            max
+          )
+        : 0;
+
+    setDraftValue(
+      String(nextValue).padStart(
+        2,
+        "0"
+      )
+    );
+
+    onChange(nextValue);
+  }
+
+  function increaseValue() {
+    const nextValue =
+      value >= max
+        ? 0
+        : value + 1;
+
+    setDraftValue(
+      String(nextValue).padStart(
+        2,
+        "0"
+      )
+    );
+
+    onChange(nextValue);
+  }
+
+  function decreaseValue() {
+    const nextValue =
+      value <= 0
+        ? max
+        : value - 1;
+
+    setDraftValue(
+      String(nextValue).padStart(
+        2,
+        "0"
+      )
+    );
+
+    onChange(nextValue);
+  }
+
+  function handleManualChange(
+    inputValue: string
+  ) {
+    const normalizedValue =
+      normalizeDigits(
+        inputValue
+      ).replace(/\D/g, "");
+
+    setDraftValue(
+      normalizedValue.slice(
+        0,
+        2
+      )
+    );
+  }
+
+  return (
+    <div className="text-center">
+      <div
+        className="
+          flex
+          h-9
+          overflow-hidden
+          rounded-md
+          border border-gray-300
+          bg-white
+        "
+      >
+        <input
+          ref={inputRef}
+          type="text"
+          inputMode="numeric"
+          maxLength={2}
+          value={draftValue}
+          onFocus={(event) =>
+            event.currentTarget.select()
+          }
+          onChange={(event) =>
+            handleManualChange(
+              event.target.value
+            )
+          }
+          onBlur={commitDraftValue}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              increaseValue();
+            }
+
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              decreaseValue();
+            }
+          }}
+          aria-label={label}
+          className="
+            h-8 w-11
+            border-0
+            bg-transparent
+            text-center
+            text-base
+            font-bold
+            text-gray-800
+            outline-none
+          "
+        />
+
+        <div
+          className="
+            flex
+            w-7
+            flex-col
+            border-l
+            border-gray-200
+          "
+        >
+          <button
+            type="button"
+            onClick={increaseValue}
+            aria-label={`افزایش ${label}`}
+            className="
+              flex flex-1
+              items-center
+              justify-center
+              text-gray-500
+              transition
+              hover:bg-blue-50
+              hover:text-[#007fcf]
+            "
+          >
+            <ChevronUp size={13} />
+          </button>
+
+          <button
+            type="button"
+            onClick={decreaseValue}
+            aria-label={`کاهش ${label}`}
+            className="
+              flex flex-1
+              items-center
+              justify-center
+              border-t
+              border-gray-200
+              text-gray-500
+              transition
+              hover:bg-blue-50
+              hover:text-[#007fcf]
+            "
+          >
+            <ChevronDown size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function getClockParts(
+  value: string
+): {
+  hours: number;
+  minutes: number;
+} {
+  const [
+    hoursText = "0",
+    minutesText = "0",
+  ] = normalizeDigits(value).split(
+    ":"
+  );
+
+  const hours =
+    Number(hoursText);
+
+  const minutes =
+    Number(minutesText);
+
+  return {
+    hours:
+      Number.isFinite(hours)
+        ? Math.min(
+            Math.max(hours, 0),
+            23
+          )
+        : 0,
+
+    minutes:
+      Number.isFinite(minutes)
+        ? Math.min(
+            Math.max(minutes, 0),
+            59
+          )
+        : 0,
+  };
+}
+
+
+function buildClockTime(
+  hours: number,
+  minutes: number
+): string {
+  return (
+    String(hours).padStart(
+      2,
+      "0"
+    ) +
+    ":" +
+    String(minutes).padStart(
+      2,
+      "0"
+    ) +
+    ":00"
+  );
+}
+
+
+/*
+ * هنگام تایپ، فقط رقم و علامت دونقطه
+ * نگهداری می‌شود و ارقام فارسی نیز پذیرفته می‌شوند.
+ */
+function normalizeEditableTime(
+  value: string
+): string {
+  return normalizeDigits(value)
+    .replace(/[^\d:]/g, "")
+    .slice(0, 8);
+}
+
+
+/*
+ * مقدار دستی مدت را برای Backend
+ * به فرمت hh:mm:ss تبدیل می‌کند.
+ */
+function normalizeDurationDraft(
+  value: string
+): string {
+  const normalized =
+    normalizeEditableTime(
+      value.trim()
+    );
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (/^\d{6}$/.test(normalized)) {
+    return (
+      normalized.slice(0, 2) +
+      ":" +
+      normalized.slice(2, 4) +
+      ":" +
+      normalized.slice(4, 6)
+    );
+  }
+
+  const parts =
+    normalized.split(":");
+
+  if (
+    parts.length === 2 &&
+    parts.every((part) =>
+      /^\d{1,2}$/.test(part)
+    )
+  ) {
+    return (
+      parts[0].padStart(2, "0") +
+      ":" +
+      parts[1].padStart(2, "0") +
+      ":00"
+    );
+  }
+
+  if (
+    parts.length === 3 &&
+    parts.every((part) =>
+      /^\d{1,2}$/.test(part)
+    )
+  ) {
+    return (
+      parts[0].padStart(2, "0") +
+      ":" +
+      parts[1].padStart(2, "0") +
+      ":" +
+      parts[2].padStart(2, "0")
+    );
+  }
+
+  return normalized;
 }
 
 
@@ -891,38 +1463,6 @@ function formatDuration(
 
 
 /*
- * عنوان فارسی گزینه‌های مدت برنامه.
- */
-function formatDurationLabel(
-  duration: string
-): string {
-  const [
-    hoursText,
-    minutesText,
-  ] = duration.split(":");
-
-  const hours =
-    Number(hoursText);
-
-  const minutes =
-    Number(minutesText);
-
-  if (hours === 0) {
-    return `${toPersianNumber(minutes)} دقیقه`;
-  }
-
-  if (minutes === 0) {
-    return `${toPersianNumber(hours)} ساعت`;
-  }
-
-  return (
-    `${toPersianNumber(hours)} ساعت و ` +
-    `${toPersianNumber(minutes)} دقیقه`
-  );
-}
-
-
-/*
  * TimeSpan
  *
  * مثال:
@@ -951,38 +1491,6 @@ function isClockTime(
     /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/
       .test(value)
   );
-}
-
-
-/*
- * تبدیل مقدار input time
- * به فرمت hh:mm:ss
- */
-function normalizeTimeInput(
-  value: string
-): string {
-  const normalizedValue =
-    normalizeDigits(
-      value.trim()
-    );
-
-
-  /*
-   * input type=time ممکن است
-   * مقدار HH:mm برگرداند.
-   */
-  if (
-    /^\d{2}:\d{2}$/
-      .test(normalizedValue)
-  ) {
-    return (
-      normalizedValue +
-      ":00"
-    );
-  }
-
-
-  return normalizedValue;
 }
 
 

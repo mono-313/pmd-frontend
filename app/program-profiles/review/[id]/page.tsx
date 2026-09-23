@@ -267,16 +267,15 @@ export default function ProgramProfileReviewDetailsPage() {
       profile,
       "networkGroupName"
     );
-  const canReturn =
-    profile.status !==
-      "PendingSupervisor" &&
-    profile.status !==
-      "Approved";
-  const isPending =
-    profile.status.startsWith(
-      "Pending"
-    );
 
+
+    const statusCode = Number(profile.status);
+    
+    const isPending=[10,20,30,40].includes(statusCode)
+    const canReturn =
+    statusCode !==20 && statusCode !==50;
+
+    
 
   return (
     <PageShell>
@@ -835,9 +834,9 @@ function StatusBadge({
   title: string;
 }) {
   const className =
-    status === "Approved"
+    status === 50
       ? "bg-green-100 text-green-700"
-      : status === "ReturnedForEdit"
+      : status === 60
         ? "bg-red-100 text-red-700"
         : "bg-amber-100 text-amber-800";
 
@@ -899,13 +898,20 @@ function ErrorBox({
 
 const STATUS_LABELS:
   Record<ProgramProfileStatus, string> = {
-  Draft: "پیش‌نویس",
-  PendingGroupManager: "در انتظار مدیر گروه",
-  PendingSupervisor: "در انتظار ناظر",
-  PendingBroadcastManager: "در انتظار مدیر پخش",
-  PendingPlanningManager: "در انتظار مدیر طرح و برنامه",
-  Approved: "تأیید نهایی",
-  ReturnedForEdit: "بازگشت برای اصلاح",
+  //Draft
+  0: "پیش‌نویس",
+  //PendingGroupManager
+  10: "در انتظار مدیر گروه",
+  //PendingSupervisor
+  20: "در انتظار ناظر",
+  //PendingBroadcastManager
+  30: "در انتظار مدیر پخش",
+  //PendingPlanningManager
+  40: "در انتظار مدیر طرح و برنامه",
+  //Approved
+  50: "تأیید نهایی",
+  //ReturnedForEdit
+  60: "بازگشت برای اصلاح",
 };
 
 
@@ -966,7 +972,7 @@ function isProgramProfile(
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.mainTopic === "string" &&
-    typeof value.status === "string" &&
+    typeof value.status === "number" &&
     Array.isArray(
       value.crewMembers
     ) &&

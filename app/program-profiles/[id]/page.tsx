@@ -59,6 +59,25 @@ export default function ProgramProfileDetailsPage() {
     setError,
   ] = useState("");
 
+  const [
+    expertNames,
+    setExpertNames,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    topicAxisTitles,
+    setTopicAxisTitles,
+  ] = useState<Record<string, string>>({});
+
+  const [
+    profileDisplayData,
+    setProfileDisplayData,
+  ] = useState<ProfileDisplayData>({
+    networkName: "",
+    networkGroupName: "",
+    programTypeName: "",
+  });
+
 
   const loadProfile =
     useCallback(async () => {
@@ -135,8 +154,40 @@ export default function ProgramProfileDetailsPage() {
         setProfile(
           normalizedProfile
         );
+
+        const [
+          displayData,
+          nextProfileDisplayData,
+        ] = await Promise.all([
+          loadExpertDisplayData(
+            normalizedProfile
+          ),
+          loadProfileDisplayData(
+            normalizedProfile
+          ),
+        ]);
+
+        setExpertNames(
+          displayData.expertNames
+        );
+
+        setTopicAxisTitles(
+          displayData.topicAxisTitles
+        );
+
+        setProfileDisplayData(
+          nextProfileDisplayData
+        );
       } catch (loadError) {
         setProfile(null);
+
+        setExpertNames({});
+        setTopicAxisTitles({});
+        setProfileDisplayData({
+          networkName: "",
+          networkGroupName: "",
+          programTypeName: "",
+        });
 
         setError(
           loadError instanceof Error
@@ -307,28 +358,24 @@ export default function ProgramProfileDetailsPage() {
               },
               {
                 label: "شبکه",
-                value: getNetworkName(
-                  profile
-                ),
+                value:
+                  profileDisplayData.networkName ||
+                  getNetworkName(profile),
               },
               {
                 label: "گروه شبکه",
-                value: getNetworkGroupName(
-                  profile
-                ),
+                value:
+                  profileDisplayData.networkGroupName ||
+                  getNetworkGroupName(profile),
               },
               {
                 label: "نوع برنامه",
                 value:
-                  displayText(
-                    profile.programTypeName
-                  ) !== "—"
-                    ? displayText(
-                        profile.programTypeName
-                      )
-                    : getProgramTypeTitle(
-                        profile.programType
-                      ),
+                  profileDisplayData.programTypeName ||
+                  getProgramTypeTitle(
+                    profile.programType,
+                    profile.productionMethod
+                  ),
               },
               {
                 label: "نحوه تولید",
@@ -528,7 +575,7 @@ export default function ProgramProfileDetailsPage() {
             <ResponsiveTable
               headers={[
                 "ردیف",
-                "شناسه کارشناس",
+                "نام کارشناس",
                 "محور موضوعی",
                 "مدت حضور",
                 "نحوه حضور",
@@ -550,15 +597,17 @@ export default function ProgramProfileDetailsPage() {
                       )}
                     </TableCell>
 
-                    <TableCell ltr>
-                      {displayText(
-                        expert.expertId
+                    <TableCell>
+                      {getExpertDisplayName(
+                        expert,
+                        expertNames
                       )}
                     </TableCell>
 
-                    <TableCell ltr>
-                      {displayText(
-                        expert.topicAxisId
+                    <TableCell>
+                      {getTopicAxisDisplayTitle(
+                        expert,
+                        topicAxisTitles
                       )}
                     </TableCell>
 
@@ -975,10 +1024,19 @@ function getNetworkName(
       source.networkName
     ) ??
     readNonEmptyString(
+      source.NetworkName
+    ) ??
+    readNonEmptyString(
       source.networkTitle
+    ) ??
+    readNonEmptyString(
+      source.NetworkTitle
     ) ??
     readNestedDisplayName(
       source.network
+    ) ??
+    readNestedDisplayName(
+      source.Network
     ) ??
     "—"
   );
@@ -1000,13 +1058,25 @@ function getNetworkGroupName(
       source.networkGroupName
     ) ??
     readNonEmptyString(
+      source.NetworkGroupName
+    ) ??
+    readNonEmptyString(
       source.networkGroupTitle
+    ) ??
+    readNonEmptyString(
+      source.NetworkGroupTitle
     ) ??
     readNonEmptyString(
       source.groupName
     ) ??
+    readNonEmptyString(
+      source.GroupName
+    ) ??
     readNestedDisplayName(
       source.networkGroup
+    ) ??
+    readNestedDisplayName(
+      source.NetworkGroup
     ) ??
     "—"
   );
@@ -1025,10 +1095,19 @@ function readNestedDisplayName(
       value.name
     ) ??
     readNonEmptyString(
+      value.Name
+    ) ??
+    readNonEmptyString(
       value.title
     ) ??
     readNonEmptyString(
+      value.Title
+    ) ??
+    readNonEmptyString(
       value.text
+    ) ??
+    readNonEmptyString(
+      value.Text
     )
   );
 }
@@ -1054,25 +1133,32 @@ function getProgramName(
 
 const STATUS_TITLES:
   Record<ProgramProfileStatus, string> = {
-  Draft:
+  //Draft:
+  0:
     "پیش‌نویس",
 
-  PendingGroupManager:
+  //PendingGroupManager:
+  10:
     "در انتظار مدیر گروه",
 
-  PendingSupervisor:
+  //PendingSupervisor:
+  20:
     "در انتظار ناظر",
 
-  PendingBroadcastManager:
+  //PendingBroadcastManager:
+  30:
     "در انتظار مدیر پخش",
 
-  PendingPlanningManager:
+  //PendingPlanningManager:
+  40:
     "در انتظار مدیر طرح و برنامه",
 
-  Approved:
+  //Approved:
+  50:
     "تأیید نهایی",
 
-  ReturnedForEdit:
+  //ReturnedForEdit:
+  60:
     "بازگشت برای اصلاح",
 };
 
@@ -1107,19 +1193,19 @@ function getStatusBadgeClass(
     "inline-flex shrink-0 rounded-full px-3 py-1.5 text-xs font-bold";
 
   switch (status) {
-    case "Approved":
+    case 50:
       return `${base} bg-green-100 text-green-700`;
 
-    case "ReturnedForEdit":
+    case 60:
       return `${base} bg-red-100 text-red-700`;
 
-    case "Draft":
+    case 0:
       return `${base} bg-gray-100 text-gray-700`;
 
-    case "PendingGroupManager":
-    case "PendingSupervisor":
-    case "PendingBroadcastManager":
-    case "PendingPlanningManager":
+    case 10:
+    case 20:
+    case 30:
+    case 40:
       return `${base} bg-amber-100 text-amber-800`;
 
     default:
@@ -1129,17 +1215,802 @@ function getStatusBadgeClass(
 
 
 function getProgramTypeTitle(
-  value: unknown
+  value: unknown,
+  productionMethod?: unknown
 ): string {
-  if (value === 10) {
+  const normalizedValue =
+    typeof value === "string"
+      ? Number(value)
+      : value;
+
+  if (normalizedValue === 10) {
     return "زنده";
   }
 
-  if (value === 20) {
+  if (normalizedValue === 20) {
     return "ضبطی یا تولیدی";
   }
 
-  return displayValue(value);
+  const method =
+    readNonEmptyString(
+      productionMethod
+    );
+
+  if (method) {
+    if (method.includes("زنده")) {
+      return "زنده";
+    }
+
+    if (
+      method.includes("ضبط") ||
+      method.includes("تولید")
+    ) {
+      return "ضبطی یا تولیدی";
+    }
+  }
+
+  return "—";
+}
+
+
+interface ProfileDisplayData {
+  networkName: string;
+  networkGroupName: string;
+  programTypeName: string;
+}
+
+
+async function loadProfileDisplayData(
+  profile: ProgramProfileResponse
+): Promise<ProfileDisplayData> {
+  let networkName =
+    getNetworkName(profile);
+
+  let networkGroupName =
+    getNetworkGroupName(profile);
+
+  const backendProgramTypeName =
+    normalizeProgramTypeName(
+      profile.programTypeName
+    );
+
+  let programTypeName =
+    backendProgramTypeName
+      ? backendProgramTypeName
+      : getProgramTypeTitle(
+          profile.programType,
+          profile.productionMethod
+        );
+
+  const networkId =
+    readRecordNumber(
+      profile,
+      "networkId"
+    );
+
+  const networkGroupId =
+    readRecordNumber(
+      profile,
+      "networkGroupId"
+    );
+
+  const requests: Promise<unknown | null>[] = [];
+
+  requests.push(
+    networkId !== null
+      ? fetchFirstApiJson([
+          `/api/networks/${encodeURIComponent(
+            String(networkId)
+          )}`,
+          `/api/networks?id=${encodeURIComponent(
+            String(networkId)
+          )}`,
+          `/api/networks?networkId=${encodeURIComponent(
+            String(networkId)
+          )}`,
+          "/api/networks",
+        ])
+      : Promise.resolve(null)
+  );
+
+  requests.push(
+    networkGroupId !== null
+      ? fetchFirstApiJson([
+          `/api/networkgroups/${encodeURIComponent(
+            String(networkGroupId)
+          )}`,
+          "/api/networkgroups" +
+            `?networkGroupId=${encodeURIComponent(
+              String(networkGroupId)
+            )}` +
+            (networkId !== null
+              ? `&networkId=${encodeURIComponent(
+                  String(networkId)
+                )}`
+              : ""),
+          "/api/networkgroups",
+        ])
+      : Promise.resolve(null)
+  );
+
+  requests.push(
+    profile.forecastId
+      ? fetchApiJson(
+          `/api/forecasts/${encodeURIComponent(
+            profile.forecastId
+          )}`
+        )
+      : Promise.resolve(null)
+  );
+
+  const [
+    networksData,
+    networkGroupsData,
+    forecastData,
+  ] = await Promise.all(requests);
+
+  if (
+    networkName === "—" &&
+    networkId !== null
+  ) {
+    networkName =
+      findEntityDisplayName(
+        networksData,
+        networkId,
+        [
+          "id",
+          "Id",
+          "ID",
+          "networkId",
+          "NetworkId",
+          "NetworkID",
+          "value",
+          "Value",
+        ],
+        [
+          "name",
+          "Name",
+          "networkName",
+          "NetworkName",
+          "title",
+          "Title",
+          "networkTitle",
+          "NetworkTitle",
+          "text",
+          "Text",
+        ]
+      ) ?? "—";
+  }
+
+  if (
+    networkGroupName === "—" &&
+    networkGroupId !== null
+  ) {
+    networkGroupName =
+      findEntityDisplayName(
+        networkGroupsData,
+        networkGroupId,
+        [
+          "id",
+          "Id",
+          "ID",
+          "networkGroupId",
+          "NetworkGroupId",
+          "NetworkGroupID",
+          "groupId",
+          "GroupId",
+          "GroupID",
+          "value",
+          "Value",
+        ],
+        [
+          "name",
+          "Name",
+          "networkGroupName",
+          "NetworkGroupName",
+          "groupName",
+          "GroupName",
+          "title",
+          "Title",
+          "networkGroupTitle",
+          "NetworkGroupTitle",
+          "text",
+          "Text",
+        ]
+      ) ?? "—";
+  }
+
+  const forecastRecord =
+    unwrapApiRecord(
+      forecastData,
+      ["forecast", "data", "result"]
+    );
+
+  if (forecastRecord) {
+    if (networkName === "—") {
+      networkName =
+        readNonEmptyString(
+          forecastRecord.networkName
+        ) ??
+        readNonEmptyString(
+          forecastRecord.NetworkName
+        ) ??
+        readNestedDisplayName(
+          forecastRecord.network
+        ) ??
+        "—";
+    }
+
+    if (networkGroupName === "—") {
+      networkGroupName =
+        readNonEmptyString(
+          forecastRecord.networkGroupName
+        ) ??
+        readNonEmptyString(
+          forecastRecord.NetworkGroupName
+        ) ??
+        readNonEmptyString(
+          forecastRecord.groupName
+        ) ??
+        readNestedDisplayName(
+          forecastRecord.networkGroup
+        ) ??
+        "—";
+    }
+
+    if (programTypeName === "—") {
+      const forecastTypeName =
+        normalizeProgramTypeName(
+          forecastRecord.programTypeName
+        );
+
+      programTypeName =
+        forecastTypeName ??
+        getProgramTypeTitle(
+          forecastRecord.programType,
+          forecastRecord.productionMethod
+        );
+    }
+  }
+
+  return {
+    networkName:
+      networkName === "—"
+        ? ""
+        : networkName,
+    networkGroupName:
+      networkGroupName === "—"
+        ? ""
+        : networkGroupName,
+    programTypeName:
+      programTypeName === "—"
+        ? ""
+        : programTypeName,
+  };
+}
+
+
+function normalizeProgramTypeName(
+  value: unknown
+): string | null {
+  const title =
+    readNonEmptyString(value);
+
+  if (
+    !title ||
+    /^0+$/.test(
+      normalizeDigits(title)
+    )
+  ) {
+    return null;
+  }
+
+  const normalizedTitle =
+    title.toLowerCase();
+
+  if (
+    normalizedTitle === "live" ||
+    title.includes("زنده")
+  ) {
+    return "زنده";
+  }
+
+  if (
+    normalizedTitle === "recorded" ||
+    normalizedTitle === "production" ||
+    title.includes("ضبط") ||
+    title.includes("تولید")
+  ) {
+    return "ضبطی یا تولیدی";
+  }
+
+  return title;
+}
+
+
+async function fetchFirstApiJson(
+  urls: string[]
+): Promise<unknown | null> {
+  for (const url of urls) {
+    const data =
+      await fetchApiJson(url);
+
+    if (data !== null) {
+      return data;
+    }
+  }
+
+  return null;
+}
+
+
+function findEntityDisplayName(
+  value: unknown,
+  targetId: number,
+  idKeys: string[],
+  nameKeys: string[]
+): string | null {
+  const queue: unknown[] = [value];
+  const visited =
+    new Set<object>();
+
+  while (queue.length > 0) {
+    const current =
+      queue.shift();
+
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
+    }
+
+    if (!isRecord(current)) {
+      continue;
+    }
+
+    if (visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+
+    const currentId =
+      idKeys
+        .map((key) =>
+          readRecordNumber(
+            current,
+            key
+          )
+        )
+        .find(
+          (id) => id !== null
+        ) ?? null;
+
+    if (currentId === targetId) {
+      for (const key of nameKeys) {
+        const name =
+          readRecordString(
+            current,
+            key
+          );
+
+        if (name) {
+          return name;
+        }
+      }
+    }
+
+    queue.push(
+      ...Object.values(current)
+    );
+  }
+
+  return null;
+}
+
+
+interface ExpertDisplayData {
+  expertNames: Record<string, string>;
+  topicAxisTitles: Record<string, string>;
+}
+
+
+async function loadExpertDisplayData(
+  profile: ProgramProfileResponse
+): Promise<ExpertDisplayData> {
+  const expertNames:
+    Record<string, string> = {};
+
+  const topicAxisTitles:
+    Record<string, string> = {};
+
+  const experts =
+    Array.isArray(profile.experts)
+      ? profile.experts
+      : [];
+
+  /*
+   * بعضی نسخه‌های Backend عنوان‌های نمایشی را
+   * داخل خود پاسخ شناسنامه برمی‌گردانند.
+   */
+  for (const expert of experts) {
+    const expertId =
+      readRecordString(
+        expert,
+        "expertId"
+      );
+
+    const topicAxisId =
+      readRecordString(
+        expert,
+        "topicAxisId"
+      );
+
+    const embeddedExpertName =
+      readExpertName(expert);
+
+    const embeddedAxisTitle =
+      readRecordString(
+        expert,
+        "topicAxisTitle"
+      ) ??
+      readRecordString(
+        expert,
+        "topicAxisName"
+      );
+
+    if (
+      expertId &&
+      embeddedExpertName
+    ) {
+      expertNames[expertId] =
+        embeddedExpertName;
+    }
+
+    if (
+      topicAxisId &&
+      embeddedAxisTitle
+    ) {
+      topicAxisTitles[topicAxisId] =
+        embeddedAxisTitle;
+    }
+  }
+
+  /*
+   * طبق مستند جدید، ProfileResponse فقط شناسه
+   * کارشناس و محور را دارد؛ نام‌ها از سرویس‌های
+   * مرجع دریافت می‌شوند.
+   */
+  const missingExpertIds = [
+    ...new Set(
+      experts
+        .map((expert) =>
+          readRecordString(
+            expert,
+            "expertId"
+          )
+        )
+        .filter(
+          (id): id is string =>
+            Boolean(
+              id &&
+              !expertNames[id]
+            )
+        )
+    ),
+  ];
+
+  const expertResults =
+    await Promise.all(
+      missingExpertIds.map(
+        async (expertId) => ({
+          expertId,
+          data:
+            await fetchApiJson(
+              `/api/experts/${encodeURIComponent(
+                expertId
+              )}`
+            ),
+        })
+      )
+    );
+
+  for (
+    const result of
+    expertResults
+  ) {
+    const expertRecord =
+      unwrapApiRecord(
+        result.data,
+        [
+          "expert",
+          "data",
+          "result",
+        ]
+      );
+
+    const expertName =
+      readExpertName(
+        expertRecord
+      );
+
+    if (expertName) {
+      expertNames[
+        result.expertId
+      ] = expertName;
+    }
+  }
+
+  if (profile.forecastId) {
+    const forecastData =
+      await fetchApiJson(
+        `/api/forecasts/${encodeURIComponent(
+          profile.forecastId
+        )}`
+      );
+
+    const forecastRecord =
+      unwrapApiRecord(
+        forecastData,
+        [
+          "forecast",
+          "data",
+          "result",
+        ]
+      );
+
+    const topicAxes =
+      forecastRecord &&
+      Array.isArray(
+        forecastRecord.topicAxes
+      )
+        ? forecastRecord.topicAxes
+        : [];
+
+    for (const axis of topicAxes) {
+      const axisId =
+        readRecordString(
+          axis,
+          "id"
+        );
+
+      const axisTitle =
+        readRecordString(
+          axis,
+          "title"
+        ) ??
+        readRecordString(
+          axis,
+          "name"
+        );
+
+      if (
+        axisId &&
+        axisTitle
+      ) {
+        topicAxisTitles[axisId] =
+          axisTitle;
+      }
+    }
+  }
+
+  return {
+    expertNames,
+    topicAxisTitles,
+  };
+}
+
+
+async function fetchApiJson(
+  url: string
+): Promise<unknown | null> {
+  try {
+    const response =
+      await fetch(url, {
+        method: "GET",
+        headers: {
+          Accept:
+            "application/json",
+        },
+        cache: "no-store",
+      });
+
+    if (!response.ok) {
+      console.warn(
+        "Display data request failed:",
+        {
+          url,
+          status:
+            response.status,
+        }
+      );
+
+      return null;
+    }
+
+    return parseJsonResponse(
+      await response.text()
+    );
+  } catch (error) {
+    console.warn(
+      "Display data request error:",
+      {
+        url,
+        error,
+      }
+    );
+
+    return null;
+  }
+}
+
+
+function getExpertDisplayName(
+  expert: unknown,
+  names: Record<string, string>
+): string {
+  const embeddedName =
+    readExpertName(expert);
+
+  if (embeddedName) {
+    return embeddedName;
+  }
+
+  const expertId =
+    readRecordString(
+      expert,
+      "expertId"
+    );
+
+  return (
+    (expertId
+      ? names[expertId]
+      : null) ??
+    "—"
+  );
+}
+
+
+function getTopicAxisDisplayTitle(
+  expert: unknown,
+  titles: Record<string, string>
+): string {
+  const embeddedTitle =
+    readRecordString(
+      expert,
+      "topicAxisTitle"
+    ) ??
+    readRecordString(
+      expert,
+      "topicAxisName"
+    );
+
+  if (embeddedTitle) {
+    return embeddedTitle;
+  }
+
+  const topicAxisId =
+    readRecordString(
+      expert,
+      "topicAxisId"
+    );
+
+  return (
+    (topicAxisId
+      ? titles[topicAxisId]
+      : null) ??
+    "—"
+  );
+}
+
+
+function readExpertName(
+  value: unknown
+): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const directName =
+    readNonEmptyString(
+      value.expertName
+    ) ??
+    readNonEmptyString(
+      value.fullName
+    ) ??
+    readNonEmptyString(
+      value.name
+    );
+
+  if (directName) {
+    return directName;
+  }
+
+  const firstName =
+    readNonEmptyString(
+      value.firstName
+    );
+
+  const lastName =
+    readNonEmptyString(
+      value.lastName
+    );
+
+  const fullName = [
+    firstName,
+    lastName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return fullName || null;
+}
+
+
+function readRecordString(
+  value: unknown,
+  key: string
+): string | null {
+  return isRecord(value)
+    ? readNonEmptyString(
+        value[key]
+      )
+    : null;
+}
+
+
+function readRecordNumber(
+  value: unknown,
+  key: string
+): number | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawValue = value[key];
+
+  const numberValue =
+    typeof rawValue === "number"
+      ? rawValue
+      : typeof rawValue === "string" &&
+          rawValue.trim()
+        ? Number(
+            normalizeDigits(
+              rawValue.trim()
+            )
+          )
+        : Number.NaN;
+
+  return Number.isFinite(
+    numberValue
+  )
+    ? numberValue
+    : null;
+}
+
+
+function unwrapApiRecord(
+  value: unknown,
+  keys: string[]
+): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.id === "string"
+  ) {
+    return value;
+  }
+
+  for (const key of keys) {
+    if (isRecord(value[key])) {
+      return value[key] as
+        Record<string, unknown>;
+    }
+  }
+
+  return value;
 }
 
 
@@ -1147,22 +2018,48 @@ function getAttendanceTitle(
   value: unknown
 ): string {
   const normalizedValue =
-    typeof value === "string" &&
-    value.trim()
-      ? Number(value)
+    typeof value === "string"
+      ? value.trim()
       : value;
+
+  const normalizedText =
+    typeof normalizedValue ===
+      "string"
+      ? normalizedValue
+          .toLowerCase()
+          .replace(/[\s_-]/g, "")
+      : "";
 
   switch (normalizedValue) {
     case 1:
+    case "1":
       return "حضوری";
 
     case 2:
+    case "2":
       return "تلفنی";
 
     case 3:
+    case "3":
       return "تولیدی (ضبط‌شده)";
 
     case 4:
+    case "4":
+      return "محل کار";
+  }
+
+  switch (normalizedText) {
+    case "inperson":
+      return "حضوری";
+
+    case "phone":
+    case "telephone":
+      return "تلفنی";
+
+    case "recorded":
+      return "تولیدی (ضبط‌شده)";
+
+    case "workplace":
       return "محل کار";
 
     default:

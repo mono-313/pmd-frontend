@@ -75,13 +75,13 @@ export interface ProgramTypeOption {
 }
 
 export type ProgramProfileStatus =
-  | "Draft"
-  | "PendingGroupManager"
-  | "PendingSupervisor"
-  | "PendingBroadcastManager"
-  | "PendingPlanningManager"
-  | "Approved"
-  | "ReturnedForEdit";
+  | 0  //"Draft"
+  | 10 //"PendingGroupManager"
+  | 20 //"PendingSupervisor"
+  | 30 //"PendingBroadcastManager"
+  | 40 //"PendingPlanningManager"
+  | 50 //"Approved"
+  | 60 //"ReturnedForEdit";
 
 /*
  * اطلاعات مرحله اول ویزارد:

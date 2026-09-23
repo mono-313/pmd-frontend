@@ -136,6 +136,17 @@ export default function ProfileCrewStep({
     null
   );
 
+  /*
+   * ردیف انتخاب‌شده برای تغییر
+   * مستقل وضعیت حضور
+   */
+  const [
+    attendanceIndex,
+    setAttendanceIndex,
+  ] = useState<number | null>(
+    null
+  );
+
   const [
     editError,
     setEditError,
@@ -370,7 +381,7 @@ export default function ProfileCrewStep({
         .trim()
     ) {
       setEditError(
-        "انتخاب نوع فعالیت الزامی است."
+        "انتخاب تخصص عامل الزامی است."
       );
 
       return;
@@ -386,12 +397,20 @@ export default function ProfileCrewStep({
           memberIndex ===
           editingIndex
             ? {
-                ...editingMember,
+                ...member,
+
+                personnelId:
+                  editingMember
+                    .personnelId,
 
                 personnelName:
                   editingMember
                     .personnelName
                     .trim(),
+
+                activityTypeId:
+                  editingMember
+                    .activityTypeId,
 
                 activityTypeName:
                   editingMember
@@ -434,6 +453,41 @@ export default function ProfileCrewStep({
 
 
     setDeletingIndex(null);
+  }
+
+
+  /*
+   * تغییر حاضر/غایب فقط پس از
+   * تأیید کاربر انجام می‌شود.
+   */
+  function confirmAttendanceChange() {
+    if (
+      attendanceIndex === null
+    ) {
+      return;
+    }
+
+
+    onChange(
+      crewMembers.map(
+        (
+          member,
+          memberIndex
+        ) =>
+          memberIndex ===
+          attendanceIndex
+            ? {
+                ...member,
+
+                isPresent:
+                  !member.isPresent,
+              }
+            : member
+      )
+    );
+
+
+    setAttendanceIndex(null);
   }
 
 
@@ -579,7 +633,7 @@ export default function ProfileCrewStep({
                     font-bold
                   "
                 >
-                  نوع فعالیت
+                  تخصص عامل
                 </th>
 
                 <th
@@ -671,22 +725,41 @@ export default function ProfileCrewStep({
                         text-center
                       "
                     >
-                      <span
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttendanceIndex(
+                            index
+                          )
+                        }
+                        title="برای تغییر وضعیت کلیک کنید"
+                        aria-label={`تغییر وضعیت ${member.personnelName}`}
                         className={`
                           inline-flex
+                          min-w-20
+                          items-center
+                          justify-center
                           rounded-full
                           px-3 py-1
                           text-xs
                           font-bold
+                          transition
+                          focus:outline-none
+                          focus:ring-2
+                          focus:ring-offset-2
                           ${
                             member.isPresent
                               ? `
                                   bg-green-100
                                   text-green-700
+                                  hover:bg-green-200
+                                  focus:ring-green-300
                                 `
                               : `
-                                  bg-gray-100
-                                  text-gray-600
+                                  bg-red-50
+                                  text-red-700
+                                  hover:bg-red-100
+                                  focus:ring-red-300
                                 `
                           }
                         `}
@@ -694,7 +767,7 @@ export default function ProfileCrewStep({
                         {member.isPresent
                           ? "حاضر"
                           : "غایب"}
-                      </span>
+                      </button>
                     </td>
 
 
@@ -974,7 +1047,7 @@ export default function ProfileCrewStep({
                     text-gray-500
                   "
                 >
-                  اطلاعات عامل انتخاب‌شده را اصلاح کنید.
+                  نام پرسنل و تخصص عامل انتخاب‌شده را اصلاح کنید.
                 </p>
               </div>
 
@@ -1082,7 +1155,7 @@ export default function ProfileCrewStep({
               </label>
 
 
-              {/* انتخاب نوع فعالیت */}
+              {/* انتخاب تخصص عامل */}
               <label className="block">
                 <span
                   className="
@@ -1093,7 +1166,7 @@ export default function ProfileCrewStep({
                     text-gray-700
                   "
                 >
-                  نوع فعالیت
+                  تخصص عامل
 
                   <span
                     className="
@@ -1135,7 +1208,7 @@ export default function ProfileCrewStep({
                   <option value="">
                     {isOptionsLoading
                       ? "در حال دریافت..."
-                      : "انتخاب نوع فعالیت"}
+                      : "انتخاب تخصص عامل"}
                   </option>
 
 
@@ -1156,67 +1229,6 @@ export default function ProfileCrewStep({
                 </select>
               </label>
             </div>
-
-
-            {/* وضعیت حضور */}
-            <label
-              className="
-                mt-5
-                flex
-                items-start
-                gap-3
-                rounded-xl
-                border border-gray-200
-                bg-gray-50
-                p-4
-              "
-            >
-              <input
-                type="checkbox"
-                checked={
-                  editingMember
-                    .isPresent
-                }
-                onChange={(event) =>
-                  setEditingMember({
-                    ...editingMember,
-
-                    isPresent:
-                      event.target
-                        .checked,
-                  })
-                }
-                className="
-                  mt-1
-                  h-4 w-4
-                  accent-[#007fcf]
-                "
-              />
-
-
-              <span>
-                <span
-                  className="
-                    block
-                    font-semibold
-                    text-gray-800
-                  "
-                >
-                  حضور در برنامه
-                </span>
-
-                <span
-                  className="
-                    mt-1
-                    block
-                    text-xs
-                    text-gray-500
-                  "
-                >
-                  در صورت حضور این عامل در برنامه، گزینه را فعال کنید.
-                </span>
-              </span>
-            </label>
 
 
             {editError && (
@@ -1282,6 +1294,145 @@ export default function ProfileCrewStep({
                 ثبت تغییرات
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+
+
+      {/* پنجره تأیید تغییر وضعیت حضور */}
+      {attendanceIndex !== null && (
+        <div
+          className="
+            fixed inset-0
+            z-[90]
+            flex
+            items-center
+            justify-center
+            bg-black/45
+            p-4
+          "
+          dir="rtl"
+        >
+          <div
+            className="
+              w-full
+              max-w-sm
+              rounded-2xl
+              bg-white
+              p-6
+              shadow-2xl
+            "
+          >
+            <h3
+              className="
+                text-lg
+                font-bold
+                text-gray-800
+              "
+            >
+              تغییر وضعیت حضور
+            </h3>
+
+
+            <p
+              className="
+                mt-3
+                text-sm
+                leading-7
+                text-gray-600
+              "
+            >
+              آیا وضعیت «
+
+              <strong>
+                {
+                  crewMembers[
+                    attendanceIndex
+                  ]?.personnelName
+                }
+              </strong>
+
+              » از
+
+              <strong className="mx-1">
+                {crewMembers[
+                  attendanceIndex
+                ]?.isPresent
+                  ? "حاضر"
+                  : "غایب"}
+              </strong>
+
+              به
+
+              <strong className="mx-1">
+                {crewMembers[
+                  attendanceIndex
+                ]?.isPresent
+                  ? "غایب"
+                  : "حاضر"}
+              </strong>
+
+              تغییر کند؟
+            </p>
+
+
+            <div
+              className="
+                mt-6
+                flex
+                items-center
+                justify-between
+                gap-3
+              "
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setAttendanceIndex(
+                    null
+                  )
+                }
+                className="
+                  rounded-lg
+                  border border-gray-300
+                  bg-white
+                  px-5 py-2.5
+                  text-gray-700
+                  hover:bg-gray-50
+                "
+              >
+                خیر
+              </button>
+
+
+              <button
+                type="button"
+                onClick={
+                  confirmAttendanceChange
+                }
+                className={`
+                  rounded-lg
+                  px-5 py-2.5
+                  font-semibold
+                  text-white
+                  ${
+                    crewMembers[
+                      attendanceIndex
+                    ]?.isPresent
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-green-600 hover:bg-green-700"
+                  }
+                `}
+              >
+                بله،
+
+                {crewMembers[
+                  attendanceIndex
+                ]?.isPresent
+                  ? " غایب شود"
+                  : " حاضر شود"}
+              </button>
+            </div>
           </div>
         </div>
       )}

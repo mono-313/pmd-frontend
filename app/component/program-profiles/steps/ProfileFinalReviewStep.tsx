@@ -103,6 +103,18 @@ export default function ProfileFinalReviewStep({
 
     try {
       /*
+       * اطلاعات کارشناسان باید قبل از صدور اصلی
+       * اعتبارسنجی شود؛ در غیر این صورت ممکن است
+       * شناسنامه صادر شود ولی ثبت کارشناسان شکست بخورد.
+       */
+      const expertsBody =
+        specifications.hasExpert
+          ? buildExpertsRequest(
+              wizardData.experts
+            )
+          : null;
+
+      /*
        * اگر قبلاً شناسنامه صادر نشده،
        * ابتدا عملیات Issue اجرا می‌شود.
        */
@@ -196,86 +208,18 @@ export default function ProfileFinalReviewStep({
        * جداگانه ثبت می‌شود.
        */
       if (
-        specifications.hasExpert
+        expertsBody
       ) {
-        const expertsBody:
+        const requestBody:
           UpdateProfileExpertsRequest = {
           profileId,
-
-          experts:
-            wizardData.experts.map(
-              (expert) => ({
-                expertId:
-                  expert.expertId,
-
-                topicAxisId:
-                  expert.topicAxisId,
-
-                duration:
-                  normalizeDigits(
-                    expert.duration
-                  ),
-
-                attendanceType:
-                  expert.attendanceType,
-
-                hasPayment:
-                  expert.hasPayment,
-              })
-            ),
+          experts: expertsBody,
         };
 
-
-        const expertsResponse =
-          await fetch(
-            `/api/program-profiles/${encodeURIComponent(
-            profileId
-          )}/experts`,
-            {
-              method:
-                "PUT",
-
-              headers: {
-                Accept:
-                  "application/json",
-
-                "Content-Type":
-                  "application/json",
-              },
-
-              body:
-                JSON.stringify(
-                  expertsBody
-                ),
-
-              cache:
-                "no-store",
-            }
-          );
-
-
-        const expertsResponseText =
-          await expertsResponse.text();
-
-
-        const expertsResponseData =
-          parseJsonResponse(
-            expertsResponseText
-          );
-
-
-        if (!expertsResponse.ok) {
-          throw new Error(
-            getErrorMessage(
-              expertsResponseData
-            ) ??
-            (
-              "شناسنامه صادر شد، اما ثبت کارشناسان انجام نشد. " +
-              "کد پاسخ: " +
-              expertsResponse.status
-            )
-          );
-        }
+        await updateProfileExperts(
+          profileId,
+          requestBody
+        );
       }
 
 
@@ -1092,9 +1036,179 @@ export default function ProfileFinalReviewStep({
 /*
  * ساخت Payload صدور شناسنامه
  */
+function buildExpertsRequest(
+  experts: ProgramProfileWizardData["experts"]
+): UpdateProfileExpertsRequest["experts"] {
+  if (experts.length === 0) {
+    throw new Error(
+      "برای برنامه دارای کارشناس، حداقل یک کارشناس باید ثبت شود."
+    );
+  }
+
+  return experts.map(
+    (expert, index) => {
+      const expertId =
+        getTrimmedString(
+          expert.expertId
+        );
+
+      const topicAxisId =
+        getTrimmedString(
+          expert.topicAxisId
+        );
+
+      const duration =
+        normalizeTimeSpan(
+          expert.duration
+        );
+
+      if (!isGuid(expertId)) {
+        throw new Error(
+          `شناسه کارشناس ردیف ${toPersianNumber(
+            index + 1
+          )} معتبر نیست.`
+        );
+      }
+
+      if (!isGuid(topicAxisId)) {
+        throw new Error(
+          `شناسه محور موضوعی ردیف ${toPersianNumber(
+            index + 1
+          )} معتبر نیست. محور باید از محورهای همان پیش‌بینی انتخاب شود.`
+        );
+      }
+
+      if (!duration) {
+        throw new Error(
+          `مدت حضور کارشناس ردیف ${toPersianNumber(
+            index + 1
+          )} باید با فرمت ساعت:دقیقه:ثانیه باشد.`
+        );
+      }
+
+      if (![1, 2, 3, 4].includes(
+        Number(
+          expert.attendanceType
+        )
+      )) {
+        throw new Error(
+          `نحوه حضور کارشناس ردیف ${toPersianNumber(
+            index + 1
+          )} معتبر نیست.`
+        );
+      }
+
+      return {
+        expertId,
+        topicAxisId,
+        duration,
+        attendanceType:
+          Number(
+            expert.attendanceType
+          ) as typeof expert.attendanceType,
+        hasPayment:
+          Boolean(
+            expert.hasPayment
+          ),
+      };
+    }
+  );
+}
+
+
 /*
- * ساخت Payload صدور شناسنامه
+ * ثبت کامل فهرست کارشناسان طبق مستند جدید.
  */
+async function updateProfileExperts(
+  profileId: string,
+  requestBody: UpdateProfileExpertsRequest
+): Promise<void> {
+  const currentRoute =
+    `/api/program-profiles/${encodeURIComponent(
+      profileId
+    )}/experts`;
+
+  console.info(
+    "PROGRAM PROFILE EXPERTS REQUEST:",
+    {
+      profileId,
+      expertsCount:
+        requestBody.experts.length,
+      experts:
+        requestBody.experts,
+    }
+  );
+
+  const result =
+    await sendExpertsRequest(
+      currentRoute,
+      requestBody
+    );
+
+  console.info(
+    "PROGRAM PROFILE EXPERTS RESPONSE:",
+    {
+      status:
+        result.response.status,
+      response:
+        result.data ??
+        result.text.slice(0, 1000),
+    }
+  );
+
+  if (!result.response.ok) {
+    throw new Error(
+      getErrorMessage(
+        result.data
+      ) ??
+      (
+        "شناسنامه صادر شد، اما ثبت کارشناسان انجام نشد. " +
+        `کد پاسخ: ${result.response.status}`
+      )
+    );
+  }
+}
+
+
+async function sendExpertsRequest(
+  url: string,
+  requestBody: UpdateProfileExpertsRequest
+): Promise<{
+  response: Response;
+  text: string;
+  data: unknown | null;
+}> {
+  const response =
+    await fetch(
+      url,
+      {
+        method: "PUT",
+        headers: {
+          Accept:
+            "application/json",
+          "Content-Type":
+            "application/json",
+        },
+        body:
+          JSON.stringify(
+            requestBody
+          ),
+        cache: "no-store",
+      }
+    );
+
+  const text =
+    await response.text();
+
+  return {
+    response,
+    text,
+    data:
+      parseJsonResponse(text),
+  };
+}
+
+
 function buildIssueRequest(
   wizardData: ProgramProfileWizardData
 ): IssueProgramProfileRequest {
@@ -1308,6 +1422,67 @@ function getStringValue(
   return typeof value === "string"
     ? value
     : "";
+}
+
+
+function isGuid(
+  value: string
+): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
+
+function normalizeTimeSpan(
+  value: unknown
+): string | null {
+  const normalized =
+    normalizeDigits(
+      getStringValue(value)
+        .trim()
+    );
+
+  const match =
+    /^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/.exec(
+      normalized
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const hours =
+    Number(match[1]);
+  const minutes =
+    Number(match[2]);
+  const seconds =
+    Number(match[3] ?? "0");
+
+  if (
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59 ||
+    seconds < 0 ||
+    seconds > 59
+  ) {
+    return null;
+  }
+
+  return [
+    hours,
+    minutes,
+    seconds,
+  ]
+    .map(
+      (part) =>
+        String(part).padStart(
+          2,
+          "0"
+        )
+    )
+    .join(":");
 }
 
 /*
@@ -1635,6 +1810,46 @@ function getErrorMessage(
     ) {
       return fieldValue;
     }
+  }
+
+  if (isRecord(value.errors)) {
+    for (
+      const errorValue of
+      Object.values(
+        value.errors
+      )
+    ) {
+      if (
+        typeof errorValue ===
+          "string" &&
+        errorValue.trim()
+      ) {
+        return errorValue.trim();
+      }
+
+      if (Array.isArray(errorValue)) {
+        const firstMessage =
+          errorValue.find(
+            (item) =>
+              typeof item ===
+                "string" &&
+              item.trim()
+          );
+
+        if (
+          typeof firstMessage ===
+          "string"
+        ) {
+          return firstMessage.trim();
+        }
+      }
+    }
+  }
+
+  if (isRecord(value.details)) {
+    return getErrorMessage(
+      value.details
+    );
   }
 
 

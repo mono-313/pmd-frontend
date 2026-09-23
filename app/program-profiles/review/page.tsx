@@ -28,21 +28,21 @@ import type {
 const PAGE_SIZE = 100;
 
 const PENDING_STATUSES = new Set<ProgramProfileStatus>([
-  "PendingGroupManager",
-  "PendingSupervisor",
-  "PendingBroadcastManager",
-  "PendingPlanningManager",
+  10,
+  20,
+  30,
+  40,
 ]);
 
 const STATUS_LABELS:
   Record<ProgramProfileStatus, string> = {
-  Draft: "پیش‌نویس",
-  PendingGroupManager: "در انتظار مدیر گروه",
-  PendingSupervisor: "در انتظار ناظر",
-  PendingBroadcastManager: "در انتظار مدیر پخش",
-  PendingPlanningManager: "در انتظار مدیر طرح و برنامه",
-  Approved: "تأیید نهایی",
-  ReturnedForEdit: "بازگشت برای اصلاح",
+  0: "پیش‌نویس",
+  10: "در انتظار مدیر گروه",
+  20: "در انتظار ناظر",
+  30: "در انتظار مدیر پخش",
+  40: "در انتظار مدیر طرح و برنامه",
+  50: "تأیید نهایی",
+  60: "بازگشت برای اصلاح",
 };
 
 
@@ -597,7 +597,7 @@ function isVisibleInInbox(
     )
   ) {
     return profile.status ===
-      "PendingGroupManager";
+     10;
   }
 
   if (
@@ -609,7 +609,7 @@ function isVisibleInInbox(
     )
   ) {
     return profile.status ===
-      "PendingSupervisor";
+      20;
   }
 
   if (
@@ -618,7 +618,7 @@ function isVisibleInInbox(
     )
   ) {
     return profile.status ===
-      "PendingBroadcastManager";
+      30;
   }
 
   if (
@@ -627,7 +627,7 @@ function isVisibleInInbox(
     )
   ) {
     return profile.status ===
-      "PendingPlanningManager";
+      40;
   }
 
   /*
@@ -757,7 +757,7 @@ function isProgramProfile(
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.mainTopic === "string" &&
-    typeof value.status === "string"
+    typeof value.status === "number"
   );
 }
 

@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -43,6 +44,16 @@ const initialPagination:
 
 
 export default function ForecastListPage() {
+  const [
+    focusedForecastId,
+    setFocusedForecastId,
+  ] = useState("");
+
+  const focusedRowRef =
+    useRef<HTMLTableRowElement | null>(
+      null
+    );
+
   const [
     forecasts,
     setForecasts,
@@ -190,6 +201,59 @@ export default function ForecastListPage() {
     loadForecasts(1);
   }, [
     loadForecasts,
+  ]);
+
+
+  useEffect(() => {
+    const query =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    setFocusedForecastId(
+      query.get("focusId")?.trim() ??
+        ""
+    );
+  }, []);
+
+
+  useEffect(() => {
+    if (
+      isLoading ||
+      !focusedForecastId ||
+      !forecasts.some(
+        (forecast) =>
+          forecast.id ===
+          focusedForecastId
+      )
+    ) {
+      return;
+    }
+
+    const frameId =
+      window.requestAnimationFrame(
+        () => {
+          focusedRowRef.current
+            ?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+
+          focusedRowRef.current
+            ?.focus({
+              preventScroll: true,
+            });
+        }
+      );
+
+    return () =>
+      window.cancelAnimationFrame(
+        frameId
+      );
+  }, [
+    forecasts,
+    focusedForecastId,
+    isLoading,
   ]);
 
   const loadPrograms =
@@ -550,17 +614,43 @@ useEffect(() => {
                     (
                       forecast,
                       index
-                    ) => (
-                      <tr
-                        key={
-                          forecast.id
-                        }
-                        className="
-                          border-t
-                          border-gray-100
-                          hover:bg-gray-50/70
-                        "
-                      >
+                    ) => {
+                      const isFocused =
+                        forecast.id ===
+                        focusedForecastId;
+
+                      return (
+                        <tr
+                          key={
+                            forecast.id
+                          }
+                          ref={
+                            isFocused
+                              ? focusedRowRef
+                              : undefined
+                          }
+                          tabIndex={
+                            isFocused
+                              ? -1
+                              : undefined
+                          }
+                          aria-current={
+                            isFocused
+                              ? "true"
+                              : undefined
+                          }
+                          className={`
+                            border-t
+                            border-gray-100
+                            outline-none
+                            transition-colors
+                            ${
+                              isFocused
+                                ? "bg-blue-50 ring-2 ring-inset ring-[#007fcf]/40"
+                                : "hover:bg-gray-50/70"
+                            }
+                          `}
+                        >
                         <td className={cellClass}>
                           {(
                             pagination.currentPage -
@@ -679,8 +769,9 @@ useEffect(() => {
                           }
                         />
                       </td>
-                      </tr>
-                    )
+                        </tr>
+                      );
+                    }
                   )
                 )}
               </tbody>
