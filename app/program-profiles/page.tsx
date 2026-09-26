@@ -215,6 +215,17 @@ export default function ProgramProfilesPage() {
               responseText
             );
 
+          const paginationHeaderData =
+            parseJsonResponse(
+              response.headers.get(
+                "Pagination"
+              ) ??
+              response.headers.get(
+                "X-Pagination"
+              ) ??
+              ""
+            );
+
 
           if (!response.ok) {
             throw new Error(
@@ -229,7 +240,8 @@ export default function ProgramProfilesPage() {
           const normalizedResult =
             normalizeListResponse(
               responseData,
-              currentPage
+              currentPage,
+              paginationHeaderData
             );
 
           if (!normalizedResult) {
@@ -244,6 +256,18 @@ export default function ProgramProfilesPage() {
             throw new Error(
               "ساختار پاسخ فهرست شناسنامه‌ها معتبر نیست."
             );
+          }
+
+          if (
+            normalizedResult.items.length === 0 &&
+            currentPage > 1
+          ) {
+            setCurrentPage(
+              (previous) =>
+                Math.max(previous - 1, 1)
+            );
+
+            return;
           }
 
 
@@ -1233,8 +1257,12 @@ export default function ProgramProfilesPage() {
 
           {!isLoading &&
             pagination &&
-            pagination.totalPages >
-              1 && (
+            (
+              currentPage > 1 ||
+              pagination.hasPrevious ||
+              pagination.hasNext ||
+              profiles.length >= PAGE_SIZE
+            ) && (
               <footer
                 className="
                   flex
@@ -1272,7 +1300,7 @@ export default function ProgramProfilesPage() {
                   <button
                     type="button"
                     disabled={
-                      !pagination.hasPrevious
+                      currentPage <= 1
                     }
                     onClick={() =>
                       setCurrentPage(
@@ -1290,21 +1318,47 @@ export default function ProgramProfilesPage() {
                     قبلی
                   </button>
 
-                  <span
-                    className="
-                      px-3
-                      text-sm
-                      text-gray-600
-                    "
-                  >
-                    صفحه {currentPage}
-                    از {pagination.totalPages}
-                  </span>
+                  {getVisiblePageNumbers(
+                    currentPage,
+                    Math.max(
+                      pagination.totalPages,
+                      currentPage +
+                        (
+                          profiles.length >=
+                          PAGE_SIZE
+                            ? 1
+                            : 0
+                        )
+                    )
+                  ).map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() =>
+                        setCurrentPage(pageNumber)
+                      }
+                      aria-current={
+                        pageNumber ===
+                        currentPage
+                          ? "page"
+                          : undefined
+                      }
+                      className={
+                        pageNumber ===
+                        currentPage
+                          ? activePaginationButtonClass
+                          : paginationButtonClass
+                      }
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
 
                   <button
                     type="button"
                     disabled={
-                      !pagination.hasNext
+                      !pagination.hasNext &&
+                      profiles.length < PAGE_SIZE
                     }
                     onClick={() =>
                       setCurrentPage(
@@ -1515,49 +1569,161 @@ export default function ProgramProfilesPage() {
  */
 function normalizeListResponse(
   value: unknown,
-  requestedPage: number
+  requestedPage: number,
+  headerPagination: unknown = null
 ): ProgramProfileListResponse | null {
-  if (Array.isArray(value)) {
-    const items =
-      value.filter(
-        isProgramProfile
-      );
+  const rawItems =
+    findProfilesArray(value);
 
-    return {
-      items,
-
-      pagination:
-        createFallbackPagination(
-          items.length,
-          requestedPage
-        ),
-    };
-  }
-
-  if (
-    !isRecord(value) ||
-    !Array.isArray(
-      value.items
-    )
-  ) {
+  if (!rawItems) {
     return null;
   }
 
   const items =
-    value.items.filter(
+    rawItems.filter(
       isProgramProfile
     );
+
+  const bodyPagination =
+    findPaginationData(value);
 
   return {
     items,
 
     pagination:
       normalizePagination(
-        value.pagination,
+        bodyPagination ??
+          headerPagination,
         items.length,
         requestedPage
       ),
   };
+}
+
+
+/*
+ * پشتیبانی از پاسخ مستقیم آرایه و پاسخ‌های
+ * { items }، { data }، { result } و ساختارهای تو‌در‌تو.
+ */
+function findProfilesArray(
+  value: unknown,
+  depth = 0
+): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (
+    !isRecord(value) ||
+    depth > 4
+  ) {
+    return null;
+  }
+
+  const possibleFields = [
+    "items",
+    "Items",
+    "profiles",
+    "Profiles",
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ];
+
+  for (const field of possibleFields) {
+    const nestedValue = value[field];
+
+    if (Array.isArray(nestedValue)) {
+      return nestedValue;
+    }
+
+    const nestedArray =
+      findProfilesArray(
+        nestedValue,
+        depth + 1
+      );
+
+    if (nestedArray) {
+      return nestedArray;
+    }
+  }
+
+  return null;
+}
+
+
+function findPaginationData(
+  value: unknown,
+  depth = 0
+): unknown | null {
+  if (
+    !isRecord(value) ||
+    depth > 4
+  ) {
+    return null;
+  }
+
+  const directPagination =
+    value.pagination ??
+    value.Pagination ??
+    value.paging ??
+    value.Paging ??
+    value.pageInfo ??
+    value.PageInfo ??
+    value.meta ??
+    value.Meta ??
+    value.metadata ??
+    value.Metadata;
+
+  if (isRecord(directPagination)) {
+    return directPagination;
+  }
+
+  if (hasPaginationFields(value)) {
+    return value;
+  }
+
+  for (const field of [
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ]) {
+    const nestedPagination =
+      findPaginationData(
+        value[field],
+        depth + 1
+      );
+
+    if (nestedPagination) {
+      return nestedPagination;
+    }
+  }
+
+  return null;
+}
+
+
+function hasPaginationFields(
+  value: Record<string, unknown>
+): boolean {
+  return (
+    value.totalCount !== undefined ||
+    value.TotalCount !== undefined ||
+    value.totalRecords !== undefined ||
+    value.TotalRecords !== undefined ||
+    value.totalItems !== undefined ||
+    value.TotalItems !== undefined ||
+    value.totalPages !== undefined ||
+    value.TotalPages !== undefined ||
+    value.pageCount !== undefined ||
+    value.PageCount !== undefined ||
+    value.pageNumber !== undefined ||
+    value.PageNumber !== undefined ||
+    value.currentPage !== undefined ||
+    value.CurrentPage !== undefined
+  );
 }
 
 
@@ -1836,6 +2002,14 @@ function normalizePagination(
   itemCount: number,
   requestedPage: number
 ): ProgramProfilePagination {
+  const hasPossibleNextPage =
+    itemCount >= PAGE_SIZE;
+
+  const minimumKnownTotal =
+    (requestedPage - 1) *
+      PAGE_SIZE +
+    itemCount;
+
   const defaultPagination:
     ProgramProfilePagination = {
     currentPage:
@@ -1845,18 +2019,27 @@ function normalizePagination(
       PAGE_SIZE,
 
     totalCount:
-      itemCount,
+      minimumKnownTotal +
+      (hasPossibleNextPage
+        ? 1
+        : 0),
 
     totalPages:
-      itemCount > 0
-        ? 1
-        : 0,
+      itemCount === 0
+        ? Math.max(
+            requestedPage - 1,
+            0
+          )
+        : requestedPage +
+          (hasPossibleNextPage
+            ? 1
+            : 0),
 
     hasPrevious:
       requestedPage > 1,
 
     hasNext:
-      false,
+      hasPossibleNextPage,
   };
 
   if (!isRecord(value)) {
@@ -1868,7 +2051,13 @@ function normalizePagination(
       value.currentPage
     ) ??
     readNumber(
+      value.CurrentPage
+    ) ??
+    readNumber(
       value.pageNumber
+    ) ??
+    readNumber(
+      value.PageNumber
     ) ??
     defaultPagination.currentPage;
 
@@ -1876,17 +2065,44 @@ function normalizePagination(
     readNumber(
       value.pageSize
     ) ??
+    readNumber(
+      value.PageSize
+    ) ??
     defaultPagination.pageSize;
 
   const totalCount =
     readNumber(
       value.totalCount
     ) ??
+    readNumber(
+      value.TotalCount
+    ) ??
+    readNumber(
+      value.totalRecords
+    ) ??
+    readNumber(
+      value.TotalRecords
+    ) ??
+    readNumber(
+      value.totalItems
+    ) ??
+    readNumber(
+      value.TotalItems
+    ) ??
     defaultPagination.totalCount;
 
   const totalPages =
     readNumber(
       value.totalPages
+    ) ??
+    readNumber(
+      value.TotalPages
+    ) ??
+    readNumber(
+      value.pageCount
+    ) ??
+    readNumber(
+      value.PageCount
     ) ??
     (
       totalCount > 0
@@ -1907,18 +2123,56 @@ function normalizePagination(
     totalPages,
 
     hasPrevious:
-      typeof value.hasPrevious ===
-      "boolean"
-        ? value.hasPrevious
-        : currentPage > 1,
+      readBoolean(
+        value.hasPrevious ??
+          value.HasPrevious ??
+          value.hasPreviousPage ??
+          value.HasPreviousPage
+      ) ??
+      currentPage > 1,
 
     hasNext:
-      typeof value.hasNext ===
-      "boolean"
-        ? value.hasNext
-        : currentPage <
-          totalPages,
+      readBoolean(
+        value.hasNext ??
+          value.HasNext ??
+          value.hasNextPage ??
+          value.HasNextPage
+      ) ??
+      currentPage < totalPages,
   };
+}
+
+
+function getVisiblePageNumbers(
+  currentPage: number,
+  totalPages: number
+): number[] {
+  const firstPage =
+    Math.max(
+      1,
+      Math.min(
+        currentPage - 2,
+        totalPages - 4
+      )
+    );
+
+  const lastPage =
+    Math.min(
+      totalPages,
+      firstPage + 4
+    );
+
+  return Array.from(
+    {
+      length:
+        Math.max(
+          lastPage - firstPage + 1,
+          0
+        ),
+    },
+    (_, index) =>
+      firstPage + index
+  );
 }
 
 
@@ -1953,14 +2207,47 @@ function createFallbackPagination(
 function readNumber(
   value: unknown
 ): number | null {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value)
-  ) {
-    return null;
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" &&
+          value.trim()
+        ? Number(
+            normalizeDigits(
+              value.trim()
+            )
+          )
+        : Number.NaN;
+
+  return Number.isFinite(
+    numericValue
+  )
+    ? numericValue
+    : null;
+}
+
+
+function readBoolean(
+  value: unknown
+): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
   }
 
-  return value;
+  if (typeof value === "string") {
+    const normalized =
+      value.trim().toLowerCase();
+
+    if (normalized === "true") {
+      return true;
+    }
+
+    if (normalized === "false") {
+      return false;
+    }
+  }
+
+  return null;
 }
 
 
@@ -2089,25 +2376,25 @@ function normalizePersianStatusTitle(
 
 const PROFILE_STATUS_TITLES:
   Record<ProgramProfileStatus, string> = {
-  Draft:
+  0:
     "پیش‌نویس",
 
-  PendingGroupManager:
+  10:
     "در انتظار مدیر گروه",
 
-  PendingSupervisor:
+  20:
     "در انتظار ناظر",
 
-  PendingBroadcastManager:
+  30:
     "در انتظار مدیر پخش",
 
-  PendingPlanningManager:
+  40:
     "در انتظار مدیر طرح و برنامه",
 
-  Approved:
+  50:
     "تأیید نهایی",
 
-  ReturnedForEdit:
+  60:
     "بازگشت برای اصلاح",
 };
 
@@ -2125,7 +2412,6 @@ function getProfileStatusTitle(
     PROFILE_STATUS_TITLES[
       profile.status
     ] ||
-    profile.status ||
     "نامشخص"
   );
 }
@@ -2138,19 +2424,19 @@ function getStatusBadgeClass(
     "inline-flex rounded-full px-2.5 py-1 text-xs font-semibold";
 
   switch (status) {
-    case "Draft":
+    case 0:
       return `${baseClass} bg-gray-100 text-gray-700`;
 
-    case "ReturnedForEdit":
+    case 60:
       return `${baseClass} bg-red-100 text-red-700`;
 
-    case "Approved":
+    case 50:
       return `${baseClass} bg-green-100 text-green-700`;
 
-    case "PendingGroupManager":
-    case "PendingSupervisor":
-    case "PendingBroadcastManager":
-    case "PendingPlanningManager":
+    case 10:
+    case 20:
+    case 30:
+    case 40:
       return `${baseClass} bg-amber-100 text-amber-800`;
 
     default:
@@ -2225,4 +2511,16 @@ const paginationButtonClass =
     hover:bg-gray-50
     disabled:cursor-not-allowed
     disabled:opacity-40
+  `;
+
+const activePaginationButtonClass =
+  `
+    rounded-lg
+    border
+    border-[#007fcf]
+    bg-[#007fcf]
+    px-4 py-2
+    text-sm
+    font-semibold
+    text-white
   `;

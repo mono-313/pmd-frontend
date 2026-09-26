@@ -25,7 +25,8 @@ import type {
 } from "@/app/types/program-profile";
 
 
-const PAGE_SIZE = 100;
+const API_PAGE_SIZE = 100;
+const TABLE_PAGE_SIZE = 10;
 
 const PENDING_STATUSES = new Set<ProgramProfileStatus>([
   10,
@@ -59,6 +60,10 @@ export default function ProgramProfileReviewInboxPage() {
     useState(true);
   const [error, setError] =
     useState("");
+  const [currentPage, setCurrentPage] =
+    useState(1);
+  const [programNames, setProgramNames] =
+    useState<Record<number, string>>({});
 
 
   useEffect(() => {
@@ -118,6 +123,54 @@ export default function ProgramProfileReviewInboxPage() {
   }, [loadInbox]);
 
 
+  const loadPrograms =
+    useCallback(async () => {
+      try {
+        const response = await fetch(
+          "/api/programs",
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+            },
+            cache: "no-store",
+          }
+        );
+
+        const responseData =
+          parseJsonResponse(
+            await response.text()
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            getApiErrorMessage(
+              responseData
+            ) ??
+              "دریافت نام برنامه‌ها انجام نشد."
+          );
+        }
+
+        setProgramNames(
+          extractProgramNames(
+            responseData
+          )
+        );
+      } catch (programError) {
+        console.error(
+          "PROGRAM NAMES ERROR:",
+          programError
+        );
+        setProgramNames({});
+      }
+    }, []);
+
+
+  useEffect(() => {
+    void loadPrograms();
+  }, [loadPrograms]);
+
+
   const inboxProfiles =
     useMemo(() => {
       const actionable =
@@ -142,7 +195,10 @@ export default function ProgramProfileReviewInboxPage() {
         (profile) =>
           [
             profile.mainTopic,
-            profile.programName,
+            getProgramName(
+              programNames,
+              profile
+            ),
             profile.createdByUserName,
             profile.statusDisplayName,
           ].some(
@@ -155,9 +211,48 @@ export default function ProgramProfileReviewInboxPage() {
       );
     }, [
       profiles,
+      programNames,
       roles,
       searchText,
     ]);
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        inboxProfiles.length /
+          TABLE_PAGE_SIZE
+      )
+    );
+
+
+  const paginatedProfiles =
+    useMemo(() => {
+      const startIndex =
+        (currentPage - 1) *
+        TABLE_PAGE_SIZE;
+
+      return inboxProfiles.slice(
+        startIndex,
+        startIndex + TABLE_PAGE_SIZE
+      );
+    }, [
+      currentPage,
+      inboxProfiles,
+    ]);
+
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchText]);
+
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
 
   return (
@@ -187,7 +282,10 @@ export default function ProgramProfileReviewInboxPage() {
 
           <button
             type="button"
-            onClick={() => void loadInbox()}
+            onClick={() => {
+              void loadInbox();
+              void loadPrograms();
+            }}
             disabled={isLoading}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#007fcf] bg-white px-4 py-2.5 text-sm font-semibold text-[#007fcf] transition hover:bg-blue-50 disabled:opacity-50"
           >
@@ -278,7 +376,7 @@ export default function ProgramProfileReviewInboxPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[950px] text-sm">
+              <table className=" min-w-[950px] text-sm">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     <TableHead>ردیف</TableHead>
@@ -292,7 +390,7 @@ export default function ProgramProfileReviewInboxPage() {
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-                  {inboxProfiles.map(
+                  {paginatedProfiles.map(
                     (profile, index) => (
                       <tr
                         key={profile.id}
@@ -300,13 +398,17 @@ export default function ProgramProfileReviewInboxPage() {
                       >
                         <TableCell>
                           {toPersianNumber(
-                            index + 1
+                            (currentPage - 1) *
+                              TABLE_PAGE_SIZE +
+                              index +
+                              1
                           )}
                         </TableCell>
 
-                        <TableCell className="font-semibold text-gray-800">
-                          {displayText(
-                            profile.programName
+                        <TableCell className="text-gray-800">
+                          {getProgramName(
+                            programNames,
+                            profile
                           )}
                         </TableCell>
 
@@ -329,7 +431,7 @@ export default function ProgramProfileReviewInboxPage() {
                         </TableCell>
 
                         <TableCell>
-                          <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">
+                          <span className="inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs  text-amber-800">
                             {getStatusLabel(
                               profile
                             )}
@@ -357,6 +459,49 @@ export default function ProgramProfileReviewInboxPage() {
                   )}
                 </tbody>
               </table>
+
+              {totalPages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-4 py-4">
+                  <span className="text-sm text-gray-500">
+                    صفحه {toPersianNumber(currentPage)} از {toPersianNumber(totalPages)}
+                  </span>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentPage(
+                          (page) =>
+                            Math.max(1, page - 1)
+                        )
+                      }
+                      disabled={currentPage === 1}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      صفحه قبل
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentPage(
+                          (page) =>
+                            Math.min(
+                              totalPages,
+                              page + 1
+                            )
+                        )
+                      }
+                      disabled={
+                        currentPage === totalPages
+                      }
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      صفحه بعد
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -444,7 +589,7 @@ async function fetchProfilePage(
       pageNumber:
         String(pageNumber),
       pageSize:
-        String(PAGE_SIZE),
+        String(API_PAGE_SIZE),
     });
 
   /*
@@ -565,6 +710,134 @@ function readTotalPages(
     Number.isFinite(rawValue)
     ? rawValue
     : 1;
+}
+
+
+function extractProgramNames(
+  value: unknown
+): Record<number, string> {
+  const programs =
+    findProgramsArray(value);
+
+  const result:
+    Record<number, string> = {};
+
+  for (const program of programs) {
+    if (!isRecord(program)) {
+      continue;
+    }
+
+    const id = readPositiveNumber(
+      program.id ??
+        program.Id ??
+        program.planId ??
+        program.PlanId ??
+        program.value ??
+        program.Value
+    );
+
+    const rawName =
+      program.name ??
+      program.Name ??
+      program.programName ??
+      program.ProgramName ??
+      program.planName ??
+      program.PlanName ??
+      program.title ??
+      program.Title ??
+      program.text ??
+      program.Text;
+
+    const name =
+      typeof rawName === "string"
+        ? rawName.trim()
+        : "";
+
+    if (id !== null && name) {
+      result[id] = name;
+    }
+  }
+
+  return result;
+}
+
+
+function findProgramsArray(
+  value: unknown
+): unknown[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    return [];
+  }
+
+  for (const field of [
+    "programs",
+    "Programs",
+    "items",
+    "Items",
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ]) {
+    const nested = value[field];
+
+    if (Array.isArray(nested)) {
+      return nested;
+    }
+
+    const nestedPrograms =
+      findProgramsArray(nested);
+
+    if (nestedPrograms.length > 0) {
+      return nestedPrograms;
+    }
+  }
+
+  return [];
+}
+
+
+function getProgramName(
+  programNames: Record<number, string>,
+  profile: ProgramProfileResponse
+): string {
+  const planId =
+    readPositiveNumber(
+      profile.planId
+    );
+
+  if (
+    planId !== null &&
+    programNames[planId]
+  ) {
+    return programNames[planId];
+  }
+
+  return displayText(
+    profile.programName
+  );
+}
+
+
+function readPositiveNumber(
+  value: unknown
+): number | null {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" &&
+          value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  return Number.isFinite(numberValue) &&
+    numberValue > 0
+    ? numberValue
+    : null;
 }
 
 

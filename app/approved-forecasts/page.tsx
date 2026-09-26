@@ -952,13 +952,13 @@ function handleProfileIssued(
                 "
               >
                 <colgroup>
+                    <col className="w-[3%]" />
+                    <col className="w-[20%]" />
                     <col className="w-[4%]" />
-                    <col className="w-[17%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[8%]" />
+                    <col className="w-[15%]" />
                     <col className="w-[7%]" />
                     <col className="w-[7%]" />
-                    <col className="w-[7%]" />
+                    <col className="w-[10%]" />
                     <col className="w-[7%]" />
                 </colgroup>
                 <thead>
@@ -1071,7 +1071,7 @@ function handleProfileIssued(
                           className={`
                             ${cellClass}
                             max-w-xs
-                            font-semibold
+                            
                             text-gray-800
                           `}
                         >

@@ -357,18 +357,6 @@ export default function ProgramProfileDetailsPage() {
                 ),
               },
               {
-                label: "شبکه",
-                value:
-                  profileDisplayData.networkName ||
-                  getNetworkName(profile),
-              },
-              {
-                label: "گروه شبکه",
-                value:
-                  profileDisplayData.networkGroupName ||
-                  getNetworkGroupName(profile),
-              },
-              {
                 label: "نوع برنامه",
                 value:
                   profileDisplayData.programTypeName ||
@@ -407,13 +395,7 @@ export default function ProgramProfileDetailsPage() {
                   profile.programStructureName
                 ),
               },
-              {
-                label: "دارای کارشناس",
-                value:
-                  profile.hasExpert
-                    ? "بله"
-                    : "خیر",
-              },
+              
               {
                 label: "تاریخ پخش",
                 value: formatPersianDate(
@@ -1298,7 +1280,7 @@ async function loadProfileDisplayData(
 
   requests.push(
     networkId !== null
-      ? fetchFirstApiJson([
+      ? fetchAllApiJson([
           `/api/networks/${encodeURIComponent(
             String(networkId)
           )}`,
@@ -1309,13 +1291,14 @@ async function loadProfileDisplayData(
             String(networkId)
           )}`,
           "/api/networks",
+          "/api/base-info/networks",
         ])
       : Promise.resolve(null)
   );
 
   requests.push(
     networkGroupId !== null
-      ? fetchFirstApiJson([
+      ? fetchAllApiJson([
           `/api/networkgroups/${encodeURIComponent(
             String(networkGroupId)
           )}`,
@@ -1329,6 +1312,8 @@ async function loadProfileDisplayData(
                 )}`
               : ""),
           "/api/networkgroups",
+          "/api/base-info/networkgroups",
+          "/api/base-info/network-groups",
         ])
       : Promise.resolve(null)
   );
@@ -1343,11 +1328,47 @@ async function loadProfileDisplayData(
       : Promise.resolve(null)
   );
 
+  requests.push(
+    Number.isFinite(profile.planId)
+      ? fetchApiJson(
+          `/api/base-info/plans/${encodeURIComponent(
+            String(profile.planId)
+          )}/detail`
+        )
+      : Promise.resolve(null)
+  );
+
+  requests.push(
+    networkId !== null &&
+    networkGroupId !== null
+      ? fetchApiJson(
+          "/api/programs" +
+          `?networkId=${encodeURIComponent(
+            String(networkId)
+          )}` +
+          `&networkGroupId=${encodeURIComponent(
+            String(networkGroupId)
+          )}`
+        )
+      : Promise.resolve(null)
+  );
+
   const [
     networksData,
     networkGroupsData,
     forecastData,
+    planDetailData,
+    programsData,
   ] = await Promise.all(requests);
+
+  const displaySources: unknown[] = [
+    profile,
+    forecastData,
+    planDetailData,
+    programsData,
+    networksData,
+    networkGroupsData,
+  ];
 
   if (
     networkName === "—" &&
@@ -1355,7 +1376,7 @@ async function loadProfileDisplayData(
   ) {
     networkName =
       findEntityDisplayName(
-        networksData,
+        displaySources,
         networkId,
         [
           "id",
@@ -1364,6 +1385,14 @@ async function loadProfileDisplayData(
           "networkId",
           "NetworkId",
           "NetworkID",
+          "network",
+          "Network",
+          "channelId",
+          "ChannelId",
+          "key",
+          "Key",
+          "code",
+          "Code",
           "value",
           "Value",
         ],
@@ -1376,10 +1405,28 @@ async function loadProfileDisplayData(
           "Title",
           "networkTitle",
           "NetworkTitle",
+          "channelName",
+          "ChannelName",
+          "label",
+          "Label",
+          "displayName",
+          "DisplayName",
           "text",
           "Text",
         ]
-      ) ?? "—";
+      ) ??
+      findFirstStringByKeys(
+        displaySources,
+        [
+          "networkName",
+          "NetworkName",
+          "networkTitle",
+          "NetworkTitle",
+          "channelName",
+          "ChannelName",
+        ]
+      ) ??
+      "—";
   }
 
   if (
@@ -1388,7 +1435,7 @@ async function loadProfileDisplayData(
   ) {
     networkGroupName =
       findEntityDisplayName(
-        networkGroupsData,
+        displaySources,
         networkGroupId,
         [
           "id",
@@ -1400,6 +1447,14 @@ async function loadProfileDisplayData(
           "groupId",
           "GroupId",
           "GroupID",
+          "networkGroup",
+          "NetworkGroup",
+          "group",
+          "Group",
+          "key",
+          "Key",
+          "code",
+          "Code",
           "value",
           "Value",
         ],
@@ -1414,10 +1469,26 @@ async function loadProfileDisplayData(
           "Title",
           "networkGroupTitle",
           "NetworkGroupTitle",
+          "label",
+          "Label",
+          "displayName",
+          "DisplayName",
           "text",
           "Text",
         ]
-      ) ?? "—";
+      ) ??
+      findFirstStringByKeys(
+        displaySources,
+        [
+          "networkGroupName",
+          "NetworkGroupName",
+          "networkGroupTitle",
+          "NetworkGroupTitle",
+          "groupName",
+          "GroupName",
+        ]
+      ) ??
+      "—";
   }
 
   const forecastRecord =
@@ -1528,16 +1599,61 @@ function normalizeProgramTypeName(
 }
 
 
-async function fetchFirstApiJson(
+async function fetchAllApiJson(
   urls: string[]
-): Promise<unknown | null> {
-  for (const url of urls) {
-    const data =
-      await fetchApiJson(url);
+): Promise<unknown[]> {
+  const results =
+    await Promise.all(
+      urls.map((url) =>
+        fetchApiJson(url)
+      )
+    );
 
-    if (data !== null) {
-      return data;
+  return results.filter(
+    (result): result is unknown =>
+      result !== null
+  );
+}
+
+
+function findFirstStringByKeys(
+  value: unknown,
+  keys: string[]
+): string | null {
+  const queue: unknown[] = [value];
+  const visited = new Set<object>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (Array.isArray(current)) {
+      queue.push(...current);
+      continue;
     }
+
+    if (!isRecord(current)) {
+      continue;
+    }
+
+    if (visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+
+    for (const key of keys) {
+      const text =
+        readRecordString(
+          current,
+          key
+        );
+
+      if (text) {
+        return text;
+      }
+    }
+
+    queue.push(...Object.values(current));
   }
 
   return null;

@@ -359,7 +359,7 @@ useEffect(() => {
             <h1
               className="
                 text-2xl
-                font-bold
+                
                 text-gray-800
               "
             >
@@ -673,7 +673,7 @@ useEffect(() => {
                             className="
                               block
                               overflow-hidden
-                              text-ellipsis
+                             
                               break-words
                               whitespace-normal
                               leading-6
@@ -700,8 +700,7 @@ useEffect(() => {
                             ${cellClass}
                             max-w-64
                             whitespace-normal
-                            font-semibold
-                            text-gray-800
+                             text-gray-800
                           `}
                         >
                           {forecast.mainTopic}
@@ -978,7 +977,6 @@ const headerClass = `
   px-4 py-4
   text-right
   text-xs
-  font-bold
   text-gray-600
 `;
 
