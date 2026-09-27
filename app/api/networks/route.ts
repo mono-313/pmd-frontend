@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import {
-  BASE_INFO_API_URL,
-  API_ENDPOINTS,
+  BASE_INFO_API_CONFIG,
 } from "@/app/lib/api-config";
 
 import type {
@@ -12,7 +11,7 @@ import type {
 export async function GET() {
   try {
     const apiKey =
-      process.env.BASE_INFO_API_KEY;
+      BASE_INFO_API_CONFIG.apiKey;
 
     if (!apiKey) {
       return NextResponse.json(
@@ -27,7 +26,7 @@ export async function GET() {
     }
 
     const response = await fetch(
-      `${BASE_INFO_API_URL}${API_ENDPOINTS.networks}`,
+      `${BASE_INFO_API_CONFIG.baseUrl}${BASE_INFO_API_CONFIG.networks}`,
       {
         method: "GET",
 

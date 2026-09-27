@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { LoaderCircle, UserPlus, X } from "lucide-react";
 import { getUserSession } from "@/app/lib/storage";
 import { EDUCATION_LEVEL_OPTIONS } from "@/app/types/expert";
@@ -28,6 +29,16 @@ interface ExpertFormData {
   networkIds: number[];
 }
 
+interface NetworkOption {
+  id: number;
+  name: string;
+}
+
+interface BusinessTypeOption {
+  id: number;
+  name: string;
+}
+
 const emptyForm: ExpertFormData = {
   firstName: "",
   lastName: "",
@@ -46,20 +57,122 @@ export default function CreateExpertDialog({
   onCreated,
 }: CreateExpertDialogProps) {
   const [formData, setFormData] = useState<ExpertFormData>(emptyForm);
-  const [allowedNetworkIds, setAllowedNetworkIds] = useState<number[]>([]);
+  const [allowedNetworks, setAllowedNetworks] = useState<NetworkOption[]>([]);
+  const [isLoadingNetworks, setIsLoadingNetworks] = useState(false);
+  const [networkError, setNetworkError] = useState("");
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeOption[]>([]);
+  const [isLoadingBusinessTypes, setIsLoadingBusinessTypes] = useState(false);
+  const [businessTypesError, setBusinessTypesError] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
 
-    const networkIds = getUserSession()?.networkIds ?? [];
-    setAllowedNetworkIds(networkIds);
+    const networkIds = normalizeNetworkIds(getUserSession()?.networkIds);
+    const controller = new AbortController();
+
+    setAllowedNetworks([]);
+    setIsLoadingNetworks(false);
+    setNetworkError("");
+    setBusinessTypes([]);
+    setIsLoadingBusinessTypes(false);
+    setBusinessTypesError("");
     setFormData({
       ...emptyForm,
       networkIds: networkIds.length === 1 ? [networkIds[0]] : [],
     });
     setError("");
+
+    if (networkIds.length === 0) {
+      setNetworkError("هیچ شبکه‌ای در نشست کاربر تعریف نشده است.");
+      return () => controller.abort();
+    }
+
+    async function loadNetworks() {
+      try {
+        setIsLoadingNetworks(true);
+
+        const response = await fetch("/api/networks", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const responseData = parseJsonResponse(await response.text());
+
+        if (!response.ok) {
+          throw new Error(
+            getMessage(responseData) ??
+              `دریافت شبکه‌ها انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        const allowedIds = new Set(networkIds);
+        const networks = getNetworkOptions(responseData).filter((network) =>
+          allowedIds.has(network.id)
+        );
+
+        if (networks.length === 0) {
+          throw new Error("نام شبکه‌های مجاز کاربر از وب‌سرویس دریافت نشد.");
+        }
+
+        setAllowedNetworks(networks);
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+
+        setNetworkError(
+          loadError instanceof Error
+            ? loadError.message
+            : "دریافت شبکه‌ها انجام نشد."
+        );
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingNetworks(false);
+      }
+    }
+
+    async function loadBusinessTypes() {
+      try {
+        setIsLoadingBusinessTypes(true);
+
+        const response = await fetch("/api/business-types", {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const responseData = parseJsonResponse(await response.text());
+
+        if (!response.ok) {
+          throw new Error(
+            getMessage(responseData) ??
+              `دریافت عناوین شغلی انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        const options = getBusinessTypeOptions(responseData);
+        if (options.length === 0) {
+          throw new Error("هیچ عنوان شغلی فعالی از وب‌سرویس دریافت نشد.");
+        }
+
+        setBusinessTypes(options);
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+
+        setBusinessTypesError(
+          loadError instanceof Error
+            ? loadError.message
+            : "دریافت عناوین شغلی انجام نشد."
+        );
+      } finally {
+        if (!controller.signal.aborted) setIsLoadingBusinessTypes(false);
+      }
+    }
+
+    void loadNetworks();
+    void loadBusinessTypes();
+
+    return () => controller.abort();
   }, [open]);
 
   if (!open) return null;
@@ -88,8 +201,8 @@ export default function CreateExpertDialog({
     const lastName = formData.lastName.trim();
     const specialty = formData.specialty.trim();
     const workplace = formData.workplace.trim();
-    const mobilePhone = formData.mobilePhone.trim();
-    const nationalCode = formData.nationalCode.trim();
+    const mobilePhone = normalizeDigits(formData.mobilePhone.trim());
+    const nationalCode = normalizeDigits(formData.nationalCode.trim());
     const workPhone = formData.workPhone.trim();
 
     if (!firstName) return setError("نام الزامی است.");
@@ -98,7 +211,12 @@ export default function CreateExpertDialog({
     if (formData.education === null) return setError("مقطع تحصیلی را انتخاب کنید.");
     if (!workplace) return setError("محل کار الزامی است.");
     if (!mobilePhone) return setError("تلفن همراه الزامی است.");
-    if (!nationalCode) return setError("کد ملی الزامی است.");
+    if (!/^09\d{9}$/.test(mobilePhone)) {
+      return setError("شماره تلفن همراه باید ۱۱ رقم و با 09 شروع شود.");
+    }
+    if (nationalCode && !isValidIranianNationalCode(nationalCode)) {
+      return setError("کد ملی واردشده معتبر نیست.");
+    }
     if (formData.networkIds.length === 0) {
       return setError("حداقل یک شبکه را انتخاب کنید.");
     }
@@ -131,32 +249,16 @@ export default function CreateExpertDialog({
         );
       }
 
+      const createdExpert = getCreatedExpert(responseData);
 
-const createdExpert =
-  getCreatedExpert(
-    responseData
-  );
+      if (!createdExpert) {
+        console.error("Invalid create expert response:", responseData);
+        throw new Error(
+          "کارشناس ثبت شد، اما اطلاعات آن از پاسخ سرور دریافت نشد."
+        );
+      }
 
-if (!createdExpert) {
-  console.error(
-    "Invalid create expert response:",
-    responseData
-  );
-
-  throw new Error(
-    "کارشناس ثبت شد، اما اطلاعات آن از پاسخ سرور دریافت نشد."
-  );
-}
-
-onCreated(
-  createdExpert
-);
-
-
-
-
-
-      
+      onCreated(createdExpert);
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -200,16 +302,49 @@ onCreated(
         <form onSubmit={handleSubmit} className="mt-5">
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <Field label="نام" required>
-              <input value={formData.firstName} onChange={(e) => updateText("firstName", e.target.value)} className={inputClass} />
+              <input
+                required
+                value={formData.firstName}
+                onChange={(event) => updateText("firstName", event.target.value)}
+                className={inputClass}
+              />
             </Field>
             <Field label="نام خانوادگی" required>
-              <input value={formData.lastName} onChange={(e) => updateText("lastName", e.target.value)} className={inputClass} />
+              <input
+                required
+                value={formData.lastName}
+                onChange={(event) => updateText("lastName", event.target.value)}
+                className={inputClass}
+              />
             </Field>
             <Field label="تخصص / سمت" required>
-              <input value={formData.specialty} onChange={(e) => updateText("specialty", e.target.value)} className={inputClass} />
+              <select
+                required
+                value={formData.specialty}
+                onChange={(event) => updateText("specialty", event.target.value)}
+                disabled={isLoadingBusinessTypes || businessTypes.length === 0}
+                className={inputClass}
+              >
+                <option value="">
+                  {isLoadingBusinessTypes
+                    ? "در حال دریافت عناوین شغلی..."
+                    : "انتخاب سمت / تخصص"}
+                </option>
+                {businessTypes.map((option) => (
+                  <option key={option.id} value={option.name}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+              {businessTypesError && (
+                <p className="mt-1.5 text-xs text-red-600">
+                  {businessTypesError}
+                </p>
+              )}
             </Field>
             <Field label="مقطع تحصیلی" required>
               <select
+                required
                 value={formData.education ?? ""}
                 onChange={(e) =>
                   setFormData((previous) => ({
@@ -228,37 +363,75 @@ onCreated(
               </select>
             </Field>
             <Field label="محل کار" required>
-              <input value={formData.workplace} onChange={(e) => updateText("workplace", e.target.value)} className={inputClass} />
+              <input
+                required
+                value={formData.workplace}
+                onChange={(event) => updateText("workplace", event.target.value)}
+                className={inputClass}
+              />
             </Field>
             <Field label="تلفن همراه" required>
-              <input value={formData.mobilePhone} onChange={(e) => updateText("mobilePhone", e.target.value)} inputMode="tel" placeholder="09121234567" className={inputClass} />
+              <input
+                required
+                value={formData.mobilePhone}
+                onChange={(event) => updateText("mobilePhone", event.target.value)}
+                inputMode="numeric"
+                maxLength={11}
+                placeholder="09121234567"
+                className={inputClass}
+              />
             </Field>
             <Field label="کد ملی" required>
-              <input value={formData.nationalCode} onChange={(e) => updateText("nationalCode", e.target.value)} inputMode="numeric" placeholder="1234567890" className={inputClass} />
+              <input
+                required
+                value={formData.nationalCode}
+                onChange={(event) => updateText("nationalCode", event.target.value)}
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="1234567890"
+                className={inputClass}
+              />
+              <p className="mt-1.5 text-xs text-gray-500">
+                اختیاری؛ در صورت ورود باید معتبر باشد.
+              </p>
             </Field>
             <Field label="تلفن محل کار">
-              <input value={formData.workPhone} onChange={(e) => updateText("workPhone", e.target.value)} inputMode="tel" placeholder="02188888888" className={inputClass} />
+              <input
+                value={formData.workPhone}
+                onChange={(event) => updateText("workPhone", event.target.value)}
+                inputMode="tel"
+                placeholder="02188888888"
+                className={inputClass}
+              />
             </Field>
           </div>
 
           <Field label="شبکه‌ها" required className="mt-5">
-            {allowedNetworkIds.length > 0 ? (
+            {isLoadingNetworks ? (
+              <div className="flex items-center gap-2 rounded-xl border border-gray-200 p-4 text-sm text-gray-500">
+                <LoaderCircle size={17} className="animate-spin" />
+                در حال دریافت نام شبکه‌ها...
+              </div>
+            ) : allowedNetworks.length > 0 ? (
               <div className="flex flex-wrap gap-3 rounded-xl border border-gray-200 p-4">
-                {allowedNetworkIds.map((networkId) => (
-                  <label key={networkId} className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
+                {allowedNetworks.map((network) => (
+                  <label
+                    key={network.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2"
+                  >
                     <input
                       type="checkbox"
-                      checked={formData.networkIds.includes(networkId)}
-                      onChange={() => toggleNetwork(networkId)}
+                      checked={formData.networkIds.includes(network.id)}
+                      onChange={() => toggleNetwork(network.id)}
                       className="h-4 w-4 accent-[#007fcf]"
                     />
-                    شبکه {networkId}
+                    {network.name}
                   </label>
                 ))}
               </div>
             ) : (
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
-                هیچ شبکه‌ای در نشست کاربر تعریف نشده است.
+                {networkError || "شبکه‌ای برای انتخاب در دسترس نیست."}
               </div>
             )}
           </Field>
@@ -271,7 +444,17 @@ onCreated(
             <button type="button" onClick={onClose} disabled={isSubmitting} className="rounded-lg border border-gray-300 px-5 py-2.5 font-semibold text-gray-700">
               انصراف
             </button>
-            <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 rounded-lg bg-[#007fcf] px-5 py-2.5 font-semibold text-white hover:bg-[#006fb5] disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={
+                isSubmitting ||
+                isLoadingNetworks ||
+                isLoadingBusinessTypes ||
+                allowedNetworks.length === 0 ||
+                businessTypes.length === 0
+              }
+              className="flex items-center gap-2 rounded-lg bg-[#007fcf] px-5 py-2.5 font-semibold text-white hover:bg-[#006fb5] disabled:opacity-60"
+            >
               {isSubmitting ? <LoaderCircle size={18} className="animate-spin" /> : <UserPlus size={18} />}
               ثبت و انتخاب کارشناس
             </button>
@@ -282,7 +465,12 @@ onCreated(
   );
 }
 
-function Field({ label, required = false, className = "", children }: {
+function Field({
+  label,
+  required = false,
+  className = "",
+  children,
+}: {
   label: string;
   required?: boolean;
   className?: string;
@@ -291,7 +479,8 @@ function Field({ label, required = false, className = "", children }: {
   return (
     <div className={className}>
       <label className="mb-2 block text-sm font-semibold text-gray-700">
-        {label}{required && <span className="mr-1 text-red-500">*</span>}
+        {label}
+        {required && <span className="mr-1 text-red-500">*</span>}
       </label>
       {children}
     </div>
@@ -300,7 +489,11 @@ function Field({ label, required = false, className = "", children }: {
 
 function parseJsonResponse(text: string): unknown | null {
   if (!text.trim()) return null;
-  try { return JSON.parse(text) as unknown; } catch { return null; }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -315,17 +508,103 @@ function getMessage(value: unknown): string | null {
   return null;
 }
 
-function getCreatedExpert(
-  value: unknown
-): ExpertOption | null {
+function normalizeNetworkIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+
+  return Array.from(
+    new Set(
+      value
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item) && item > 0)
+    )
+  );
+}
+
+function getNetworkOptions(value: unknown): NetworkOption[] {
+  const items = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.networks)
+      ? value.networks
+      : [];
+
+  const options: NetworkOption[] = [];
+
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+
+    const id = Number(item.id);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    const disabled = item.disabled === true;
+
+    if (Number.isInteger(id) && id > 0 && name && !disabled) {
+      options.push({ id, name });
+    }
+  }
+
+  return options;
+}
+
+function getBusinessTypeOptions(value: unknown): BusinessTypeOption[] {
+  const items = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.businessTypes)
+      ? value.businessTypes
+      : [];
+
+  const options: BusinessTypeOption[] = [];
+  const names = new Set<string>();
+
+  for (const item of items) {
+    if (!isRecord(item)) continue;
+
+    const id = Number(item.id);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    const disabled = item.disabled === true;
+
+    if (
+      Number.isInteger(id) &&
+      id > 0 &&
+      name &&
+      !disabled &&
+      !names.has(name)
+    ) {
+      names.add(name);
+      options.push({ id, name });
+    }
+  }
+
+  return options.sort((first, second) =>
+    first.name.localeCompare(second.name, "fa")
+  );
+}
+
+function normalizeDigits(value: string): string {
+  return value
+    .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+    .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+}
+
+function isValidIranianNationalCode(value: string): boolean {
+  if (!/^\d{10}$/.test(value) || /^(\d)\1{9}$/.test(value)) return false;
+
+  const checkDigit = Number(value[9]);
+  const sum = value
+    .slice(0, 9)
+    .split("")
+    .reduce((total, digit, index) => total + Number(digit) * (10 - index), 0);
+  const remainder = sum % 11;
+  const expectedCheckDigit = remainder < 2 ? remainder : 11 - remainder;
+
+  return checkDigit === expectedCheckDigit;
+}
+
+function getCreatedExpert(value: unknown): ExpertOption | null {
   /*
    * حالت اول:
    * Backend مستقیماً ExpertResponse
    * برگردانده است.
    */
-  if (
-    isExpertOption(value)
-  ) {
+  if (isExpertOption(value)) {
     return value;
   }
 
@@ -338,39 +617,25 @@ function getCreatedExpert(
    * Route داخلی پاسخ را داخل
    * expert قرار داده است.
    */
-  if (
-    isExpertOption(
-      value.expert
-    )
-  ) {
+  if (isExpertOption(value.expert)) {
     return value.expert;
   }
 
   /*
    * پشتیبانی از Wrapperهای احتمالی
    */
-  if (
-    isExpertOption(
-      value.data
-    )
-  ) {
+  if (isExpertOption(value.data)) {
     return value.data;
   }
 
-  if (
-    isExpertOption(
-      value.result
-    )
-  ) {
+  if (isExpertOption(value.result)) {
     return value.result;
   }
 
   return null;
 }
 
-function isExpertOption(
-  value: unknown
-): value is ExpertOption {
+function isExpertOption(value: unknown): value is ExpertOption {
   if (!isRecord(value)) {
     return false;
   }
@@ -380,17 +645,11 @@ function isExpertOption(
    * وجود این سه فیلد کافی است.
    */
   return (
-    typeof value.id ===
-      "string" &&
-
+    typeof value.id === "string" &&
     value.id.length > 0 &&
-
-    typeof value.firstName ===
-      "string" &&
-
-    typeof value.lastName ===
-      "string"
+    typeof value.firstName === "string" &&
+    typeof value.lastName === "string"
   );
 }
-const inputClass = "h-12 w-full rounded-lg border border-gray-300 bg-white px-3 outline-none focus:border-[#007fcf]";
 
+const inputClass = "h-12 w-full rounded-lg border border-gray-300 bg-white px-3 outline-none focus:border-[#007fcf]";
