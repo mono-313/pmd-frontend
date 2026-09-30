@@ -199,7 +199,7 @@ export default function ApprovedProgramProfilesPage() {
               .filter(
                 (profile) =>
                   profile.status ===
-                  "Approved"
+                  50
               )
               .sort(
                 compareProfilesDescending

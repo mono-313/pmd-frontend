@@ -1256,7 +1256,7 @@ function getActionAccess(
 
   if (
     profile.status ===
-      "PendingGroupManager"
+      10
   ) {
     const allowed =
       isAdmin ||
@@ -1281,7 +1281,7 @@ function getActionAccess(
 
   if (
     profile.status ===
-      "PendingSupervisor"
+      20
   ) {
     const isLiveProgram =
       Number(
@@ -1320,7 +1320,7 @@ function getActionAccess(
 
   if (
     profile.status ===
-      "PendingBroadcastManager"
+      30
   ) {
     const allowed =
       isAdmin ||
@@ -1342,7 +1342,7 @@ function getActionAccess(
 
   if (
     profile.status ===
-      "PendingPlanningManager"
+      40
   ) {
     const allowed =
       isAdmin ||
@@ -1743,25 +1743,25 @@ function getStatusTitle(
     ProgramProfileResponse["status"]
 ): string {
   switch (status) {
-    case "Draft":
+    case 0:
       return "پیش‌نویس";
 
-    case "PendingGroupManager":
+    case 10:
       return "در انتظار مدیر گروه";
 
-    case "PendingSupervisor":
+    case 20:
       return "در انتظار ناظر";
 
-    case "PendingBroadcastManager":
+    case 30:
       return "در انتظار مدیر پخش";
 
-    case "PendingPlanningManager":
+    case 40:
       return "در انتظار مدیر طرح و برنامه‌ریزی";
 
-    case "Approved":
+    case 50:
       return "تأیید نهایی";
 
-    case "ReturnedForEdit":
+    case 60:
       return "بازگشت برای اصلاح";
 
     default:

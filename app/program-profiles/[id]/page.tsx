@@ -15,10 +15,12 @@ import {
 import {
   AlertCircle,
   ArrowRight,
+  CheckCircle2,
   Clock3,
   FileText,
   LoaderCircle,
   RefreshCcw,
+  RotateCcw,
   Users,
 } from "lucide-react";
 
@@ -77,6 +79,25 @@ export default function ProgramProfileDetailsPage() {
     networkGroupName: "",
     programTypeName: "",
   });
+
+  const [roles, setRoles] =
+    useState<string[]>([]);
+  const [areRolesLoaded, setAreRolesLoaded] =
+    useState(false);
+  const [returnReason, setReturnReason] =
+    useState("");
+  const [isSubmittingAction, setIsSubmittingAction] =
+    useState(false);
+  const [actionError, setActionError] =
+    useState("");
+  const [actionSuccess, setActionSuccess] =
+    useState("");
+
+
+  useEffect(() => {
+    setRoles(readCurrentUserRoles());
+    setAreRolesLoaded(true);
+  }, []);
 
 
   const loadProfile =
@@ -205,6 +226,112 @@ export default function ProgramProfileDetailsPage() {
   }, [loadProfile]);
 
 
+  const workflowAccess =
+    profile
+      ? getWorkflowAccess(profile, roles)
+      : EMPTY_WORKFLOW_ACCESS;
+
+
+  async function executeWorkflowAction(
+    action: "approve" | "return"
+  ) {
+    if (!profileId || !profile) {
+      setActionError("شناسه شناسنامه معتبر نیست.");
+      return;
+    }
+
+    if (
+      action === "approve" &&
+      !workflowAccess.canApprove
+    ) {
+      setActionError(workflowAccess.message);
+      return;
+    }
+
+    const normalizedReason =
+      returnReason.trim();
+
+    if (
+      action === "return" &&
+      !workflowAccess.canReturn
+    ) {
+      setActionError(workflowAccess.message);
+      return;
+    }
+
+    if (
+      action === "return" &&
+      !normalizedReason
+    ) {
+      setActionError("وارد کردن دلیل بازگشت الزامی است.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      action === "approve"
+        ? "آیا از تأیید و ارسال شناسنامه به مرحله بعد مطمئن هستید؟"
+        : "آیا از بازگرداندن شناسنامه به مرحله قبل مطمئن هستید؟"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setIsSubmittingAction(true);
+      setActionError("");
+      setActionSuccess("");
+
+      const response = await fetch(
+        `/api/program-profiles/${encodeURIComponent(profileId)}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            ...(action === "return"
+              ? { "Content-Type": "application/json" }
+              : {}),
+          },
+          body:
+            action === "return"
+              ? JSON.stringify({ reason: normalizedReason })
+              : undefined,
+        }
+      );
+
+      const responseData = parseJsonResponse(
+        await response.text()
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          getApiErrorMessage(responseData) ??
+            `عملیات گردش‌کار انجام نشد. کد پاسخ: ${response.status}`
+        );
+      }
+
+      setActionSuccess(
+        getApiErrorMessage(responseData) ??
+          (action === "approve"
+            ? "شناسنامه با موفقیت تأیید و به مرحله بعد ارسال شد."
+            : "شناسنامه با موفقیت بازگردانده شد.")
+      );
+      setReturnReason("");
+
+      await loadProfile();
+      router.refresh();
+    } catch (workflowError) {
+      setActionError(
+        workflowError instanceof Error
+          ? workflowError.message
+          : "عملیات گردش‌کار شناسنامه انجام نشد."
+      );
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  }
+
+
   if (isLoading) {
     return (
       <main
@@ -322,6 +449,105 @@ export default function ProgramProfileDetailsPage() {
         </header>
 
 
+        {actionSuccess && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
+            <CheckCircle2 size={21} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold leading-7">
+              {actionSuccess}
+            </p>
+          </div>
+        )}
+
+
+        {actionError && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <AlertCircle size={21} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold leading-7">
+              {actionError}
+            </p>
+          </div>
+        )}
+
+
+        {areRolesLoaded &&
+          isPendingWorkflowStatus(profile.status) && (
+          <section className="mb-6 overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm">
+            <header className="border-b border-blue-100 bg-blue-50 px-5 py-4">
+              <h2 className="font-bold text-gray-800">
+                عملیات گردش‌کار
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-gray-600">
+                {workflowAccess.message}
+              </p>
+            </header>
+
+            {(workflowAccess.canApprove || workflowAccess.canReturn) ? (
+              <div className="p-5">
+                {workflowAccess.canReturn && (
+                  <div className="mb-4">
+                    <label
+                      htmlFor="return-reason"
+                      className="mb-2 block text-sm font-semibold text-gray-700"
+                    >
+                      دلیل بازگشت
+                    </label>
+                    <textarea
+                      id="return-reason"
+                      value={returnReason}
+                      onChange={(event) => {
+                        setReturnReason(event.target.value);
+                        setActionError("");
+                      }}
+                      rows={3}
+                      disabled={isSubmittingAction}
+                      placeholder="دلیل بازگشت شناسنامه را وارد کنید"
+                      className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-sm leading-7 outline-none transition focus:border-[#007fcf] focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  {workflowAccess.canApprove && (
+                    <button
+                      type="button"
+                      onClick={() => void executeWorkflowAction("approve")}
+                      disabled={isSubmittingAction}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSubmittingAction ? (
+                        <LoaderCircle size={19} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={19} />
+                      )}
+                      تأیید و ارسال به مرحله بعد
+                    </button>
+                  )}
+
+                  {workflowAccess.canReturn && (
+                    <button
+                      type="button"
+                      onClick={() => void executeWorkflowAction("return")}
+                      disabled={isSubmittingAction || !returnReason.trim()}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-300 bg-white px-5 py-2.5 font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <RotateCcw size={19} />
+                      بازگشت به مرحله قبل
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start gap-3 p-5 text-amber-800">
+                <AlertCircle size={21} className="mt-0.5 shrink-0" />
+                <p className="text-sm leading-7">
+                  برای نقش فعلی شما عملیاتی در این مرحله وجود ندارد.
+                </p>
+              </div>
+            )}
+          </section>
+        )}
+
+
         <DetailsSection
           title="مشخصات شناسنامه"
           icon={
@@ -395,7 +621,13 @@ export default function ProgramProfileDetailsPage() {
                   profile.programStructureName
                 ),
               },
-              
+              {
+                label: "دارای کارشناس",
+                value:
+                  profile.hasExpert
+                    ? "بله"
+                    : "خیر",
+              },
               {
                 label: "تاریخ پخش",
                 value: formatPersianDate(
@@ -983,14 +1215,6 @@ function isProgramProfileResponse(
 }
 
 
-/*
- * طبق مستند ProfileResponse شناسه شبکه و گروه
- * قطعی است؛ با این حال برخی نسخه‌های Backend
- * عنوان نمایشی را نیز در یکی از کلیدهای زیر
- * برمی‌گردانند. در این صفحه فقط عنوان نمایش
- * داده می‌شود و شناسه به‌عنوان جایگزین استفاده
- * نخواهد شد.
- */
 function getNetworkName(
   profile: ProgramProfileResponse
 ): string {
@@ -1110,6 +1334,229 @@ function getProgramName(
   return `برنامه شماره ${toPersianNumber(
     profile.planId
   )}`;
+}
+
+
+interface WorkflowAccess {
+  canApprove: boolean;
+  canReturn: boolean;
+  message: string;
+}
+
+
+const EMPTY_WORKFLOW_ACCESS:
+  WorkflowAccess = {
+  canApprove: false,
+  canReturn: false,
+  message:
+    "اطلاعات گردش‌کار در حال بررسی است.",
+};
+
+
+function getWorkflowAccess(
+  profile: ProgramProfileResponse,
+  roles: string[]
+): WorkflowAccess {
+  if (!isPendingWorkflowStatus(profile.status)) {
+    return {
+      canApprove: false,
+      canReturn: false,
+      message:
+        "این شناسنامه در مرحله قابل اقدام قرار ندارد.",
+    };
+  }
+
+  const normalizedRoles =
+    new Set(
+      roles.map(normalizeRole)
+    );
+
+  const isAdmin =
+    normalizedRoles.has("admin");
+
+  let requiredRole = "";
+  let requiredRoleTitle = "";
+
+  switch (profile.status) {
+    case 10:
+      requiredRole =
+        "networkgroupmanager";
+      requiredRoleTitle =
+        "مدیر گروه شبکه";
+      break;
+
+    case 20: {
+      const programType =
+        normalizeProgramType(
+          profile.programType
+        );
+
+      if (programType === 10) {
+        requiredRole =
+          "livesupervisor";
+        requiredRoleTitle =
+          "ناظر برنامه زنده";
+      } else if (programType === 20) {
+        requiredRole =
+          "supervisor";
+        requiredRoleTitle =
+          "ناظر برنامه ضبطی";
+      } else {
+        return {
+          canApprove: isAdmin,
+          canReturn: false,
+          message:
+            "نوع برنامه معتبر نیست؛ programType باید برای برنامه زنده ۱۰ و برای برنامه ضبطی ۲۰ باشد.",
+        };
+      }
+      break;
+    }
+
+    case 30:
+      requiredRole =
+        "broadcastmanager";
+      requiredRoleTitle =
+        "مدیر پخش";
+      break;
+
+    case 40:
+      requiredRole =
+        "planmanager";
+      requiredRoleTitle =
+        "مدیر طرح و برنامه‌ریزی";
+      break;
+  }
+
+  const hasStageRole =
+    normalizedRoles.has(
+      requiredRole
+    );
+  const canAct =
+    isAdmin || hasStageRole;
+  const canReturn =
+    canAct && profile.status !== 20;
+
+  return {
+    canApprove: canAct,
+    canReturn,
+    message:
+      profile.status === 20
+        ? `مرحله جاری متعلق به ${requiredRoleTitle} است. در مرحله ناظر فقط تأیید مجاز است.`
+        : `مرحله جاری متعلق به ${requiredRoleTitle} است. تأیید یا بازگشت با ثبت دلیل امکان‌پذیر است.`,
+  };
+}
+
+
+function isPendingWorkflowStatus(
+  status: ProgramProfileStatus
+): status is 10 | 20 | 30 | 40 {
+  return (
+    status === 10 ||
+    status === 20 ||
+    status === 30 ||
+    status === 40
+  );
+}
+
+
+function normalizeProgramType(
+  value: unknown
+): 10 | 20 | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  return numericValue === 10 || numericValue === 20
+    ? numericValue
+    : null;
+}
+
+
+function readCurrentUserRoles(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  for (const key of [
+    "pmd-user-session",
+    "userInfo",
+    "user-info",
+    "auth-user",
+  ]) {
+    try {
+      const rawValue =
+        window.localStorage.getItem(key);
+
+      if (!rawValue) {
+        continue;
+      }
+
+      const parsedValue =
+        JSON.parse(rawValue) as unknown;
+
+      if (!isRecord(parsedValue)) {
+        continue;
+      }
+
+      const possibleContainers: unknown[] = [
+        parsedValue,
+        parsedValue.user,
+        parsedValue.data,
+      ];
+
+      for (const container of possibleContainers) {
+        if (!isRecord(container)) {
+          continue;
+        }
+
+        const rawRoles =
+          container.roles ??
+          container.role;
+
+        if (Array.isArray(rawRoles)) {
+          const result = rawRoles.filter(
+            (role): role is string =>
+              typeof role === "string" &&
+              role.trim().length > 0
+          );
+
+          if (result.length > 0) {
+            return result;
+          }
+        }
+
+        if (
+          typeof rawRoles === "string" &&
+          rawRoles.trim()
+        ) {
+          return rawRoles
+            .split(",")
+            .map((role) => role.trim())
+            .filter(Boolean);
+        }
+      }
+    } catch (storageError) {
+      console.warn(
+        `Invalid auth data in localStorage key ${key}:`,
+        storageError
+      );
+    }
+  }
+
+  return [];
+}
+
+
+function normalizeRole(
+  value: string
+): string {
+  return value
+    .trim()
+    .replace(/[\s_-]/g, "")
+    .toLowerCase();
 }
 
 

@@ -114,7 +114,10 @@ const registerSchema = z
       .number()
       .int()
       .positive()
-      .nullable(),
+      .nullable()
+      .refine((value) => value !== null, {
+        message: "انتخاب زیرشبکه الزامی است.",
+      }),
 
     role: z.enum(ROLE_VALUES),
   })
@@ -126,7 +129,11 @@ const registerSchema = z
     }
   );
 
-type RegisterFormData = z.infer<
+/*
+ * State فرم قبل از اعتبارسنجی می‌تواند networkGroupId = null داشته باشد.
+ * خروجی موفق Schema به‌کمک refine فقط مقدار عددی معتبر خواهد داشت.
+ */
+type RegisterFormData = z.input<
   typeof registerSchema
 >;
 
@@ -605,11 +612,12 @@ export default function RegisterPage() {
 
             <SelectField
               id="networkGroupId"
-              label="گروه شبکه"
+              label="زیرشبکه / گروه شبکه"
               value={formData.networkGroupId}
-              placeholder="گروه شبکه را انتخاب کنید"
+              placeholder="زیرشبکه را انتخاب کنید"
               options={visibleNetworkGroups}
               error={fieldErrors.networkGroupId}
+              required
               disabled={isLoadingAssignments}
               onChange={handleNetworkGroupChange}
             />
@@ -898,6 +906,7 @@ function SelectField({
   options,
   placeholder,
   error,
+  required = false,
   disabled = false,
   onChange,
 }: {
@@ -912,6 +921,7 @@ function SelectField({
   }>;
   placeholder?: string;
   error?: string;
+  required?: boolean;
   disabled?: boolean;
   onChange: (
     event: ChangeEvent<HTMLSelectElement>
@@ -919,12 +929,20 @@ function SelectField({
 }) {
   return (
     <div className={styles.field}>
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required && (
+          <span aria-hidden="true" style={{ color: "#c33c4d", marginRight: 4 }}>
+            *
+          </span>
+        )}
+      </label>
 
       <select
         id={id}
         name={id}
         value={value ?? ""}
+        required={required}
         disabled={disabled}
         onChange={onChange}
         aria-invalid={Boolean(error)}

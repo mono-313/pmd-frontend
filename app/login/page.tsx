@@ -425,13 +425,13 @@ export default function LoginPage() {
               : "ورود به سامانه"}
           </button>
 
-          <p className={styles.registerLink}>
+          {/* <p className={styles.registerLink}>
             حساب کاربری ندارید؟
 
             <Link href="/register">
               ثبت‌نام
             </Link>
-          </p>
+          </p> */}
         </form>
       </section>
     </main>

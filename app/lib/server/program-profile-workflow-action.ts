@@ -63,6 +63,14 @@ const PROFILE_WORKFLOW_ROLES =
   ]);
 
 
+const STANDARD_ROLE_CLAIM_KEYS = [
+  "role",
+  "roles",
+  "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+  "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role",
+] as const;
+
+
 /*
  * اجرای عملیات گردش‌کار شناسنامه:
  *
@@ -288,8 +296,7 @@ export async function executeProgramProfileWorkflowAction({
           body:
             action === "return"
               ? JSON.stringify({
-                  role:
-                    profileRole,
+                  id: normalizedProfileId,
 
                   reason:
                     normalizedReason,
@@ -378,7 +385,8 @@ export async function executeProgramProfileWorkflowAction({
           responseData,
       },
       {
-        status: 200,
+        status:
+          backendResponse.status,
       }
     );
   } catch (error) {
@@ -426,19 +434,17 @@ function extractProfileRole(
    * Claim اصلی طبق مستند جدید.
    */
   const directProfileRole =
-    getString(
+    getCanonicalWorkflowRole(
       payload.profile_role
     ) ??
-    getString(
+    getCanonicalWorkflowRole(
       payload.profileRole
+    ) ??
+    getCanonicalWorkflowRole(
+      payload["profile-role"]
     );
 
-  if (
-    directProfileRole &&
-    PROFILE_WORKFLOW_ROLES.has(
-      directProfileRole
-    )
-  ) {
+  if (directProfileRole) {
     return directProfileRole;
   }
 
@@ -447,34 +453,65 @@ function extractProfileRole(
    * اگر Backend نقش را داخل role یا roles
    * قرار داده باشد.
    */
-  const directRole =
-    getString(
-      payload.role
-    );
-
-  if (
-    directRole &&
-    PROFILE_WORKFLOW_ROLES.has(
-      directRole
+  const tokenRoles =
+    STANDARD_ROLE_CLAIM_KEYS.flatMap(
+      (claimKey) =>
+        normalizeRoles(
+          payload[claimKey]
+        )
     )
-  ) {
-    return directRole;
+      .map(getCanonicalWorkflowRole)
+      .filter(
+        (role): role is string =>
+          role !== null
+      );
+
+  /*
+   * اگر کاربر Admin است، در fallback همان نقش ارسال شود؛
+   * چون Admin در تمام مراحل مجاز است و انتخاب نقش دیگری
+   * از یک توکن چندنقشی می‌تواند باعث 403 اشتباه شود.
+   */
+  if (tokenRoles.includes("Admin")) {
+    return "Admin";
   }
 
-  const tokenRoles =
-    normalizeRoles(
-      payload.roles
-    );
+  return tokenRoles[0] ?? null;
+}
+
+
+function getCanonicalWorkflowRole(
+  value: unknown
+): string | null {
+  const role =
+    getString(value);
+
+  if (!role) {
+    return null;
+  }
+
+  const normalizedRole =
+    normalizeRoleName(role);
 
   return (
-    tokenRoles.find(
-      (role) =>
-        PROFILE_WORKFLOW_ROLES.has(
-          role
-        )
-    ) ??
-    null
+    Array.from(
+      PROFILE_WORKFLOW_ROLES
+    ).find(
+      (allowedRole) =>
+        normalizeRoleName(
+          allowedRole
+        ) === normalizedRole
+    ) ?? null
   );
+}
+
+
+function normalizeRoleName(
+  value: string
+): string {
+  return value
+    .trim()
+    .replace(/[\s_-]/g, "")
+    .toLowerCase();
 }
 
 

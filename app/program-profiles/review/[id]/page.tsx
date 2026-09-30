@@ -15,11 +15,14 @@ import {
 import {
   AlertCircle,
   ArrowRight,
-  Clock3,
+  CheckCircle2,
+  Clock3, 
   FileText,
   LoaderCircle,
   RefreshCcw,
+  RotateCcw,
   Users,
+  X,
 } from "lucide-react";
 
 import type {
@@ -77,6 +80,27 @@ export default function ProgramProfileDetailsPage() {
     networkGroupName: "",
     programTypeName: "",
   });
+
+  const [roles, setRoles] =
+    useState<string[]>([]);
+  const [areRolesLoaded, setAreRolesLoaded] =
+    useState(false);
+  const [returnReason, setReturnReason] =
+    useState("");
+  const [isSubmittingAction, setIsSubmittingAction] =
+    useState(false);
+  const [actionError, setActionError] =
+    useState("");
+  const [actionSuccess, setActionSuccess] =
+    useState("");
+  const [actionDialog, setActionDialog] =
+    useState<"approve" | "return" | null>(null);
+
+
+  useEffect(() => {
+    setRoles(readCurrentUserRoles());
+    setAreRolesLoaded(true);
+  }, []);
 
 
   const loadProfile =
@@ -205,6 +229,104 @@ export default function ProgramProfileDetailsPage() {
   }, [loadProfile]);
 
 
+  const workflowAccess =
+    profile
+      ? getWorkflowAccess(profile, roles)
+      : EMPTY_WORKFLOW_ACCESS;
+
+
+  async function executeWorkflowAction(
+    action: "approve" | "return"
+  ) {
+    if (!profileId || !profile) {
+      setActionError("شناسه شناسنامه معتبر نیست.");
+      return;
+    }
+
+    if (
+      action === "approve" &&
+      !workflowAccess.canApprove
+    ) {
+      setActionError(workflowAccess.message);
+      return;
+    }
+
+    const normalizedReason =
+      returnReason.trim();
+
+    if (
+      action === "return" &&
+      !workflowAccess.canReturn
+    ) {
+      setActionError(workflowAccess.message);
+      return;
+    }
+
+    if (
+      action === "return" &&
+      !normalizedReason
+    ) {
+      setActionError("وارد کردن دلیل بازگشت الزامی است.");
+      return;
+    }
+
+    try {
+      setIsSubmittingAction(true);
+      setActionError("");
+      setActionSuccess("");
+
+      const response = await fetch(
+        `/api/program-profiles/${encodeURIComponent(profileId)}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            ...(action === "return"
+              ? { "Content-Type": "application/json" }
+              : {}),
+          },
+          body:
+            action === "return"
+              ? JSON.stringify({ reason: normalizedReason })
+              : undefined,
+        }
+      );
+
+      const responseData = parseJsonResponse(
+        await response.text()
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          getApiErrorMessage(responseData) ??
+            `عملیات گردش‌کار انجام نشد. کد پاسخ: ${response.status}`
+        );
+      }
+
+      setActionSuccess(
+        getApiErrorMessage(responseData) ??
+          (action === "approve"
+            ? "شناسنامه با موفقیت تأیید و به مرحله بعد ارسال شد."
+            : "شناسنامه با موفقیت بازگردانده شد.")
+      );
+      setReturnReason("");
+      setActionDialog(null);
+
+      window.setTimeout(() => {
+        router.replace("/program-profiles/review");
+      }, 900);
+    } catch (workflowError) {
+      setActionError(
+        workflowError instanceof Error
+          ? workflowError.message
+          : "عملیات گردش‌کار شناسنامه انجام نشد."
+      );
+    } finally {
+      setIsSubmittingAction(false);
+    }
+  }
+
+
   if (isLoading) {
     return (
       <main
@@ -233,7 +355,7 @@ export default function ProgramProfileDetailsPage() {
         dir="rtl"
       >
         <section
-          className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700 shadow-sm"
+          className="max-w-3xl rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700 shadow-sm"
         >
           <div className="flex items-start gap-3">
             <AlertCircle
@@ -289,7 +411,7 @@ export default function ProgramProfileDetailsPage() {
       className="min-h-screen min-w-0 bg-gray-50 px-4 py-8"
       dir="rtl"
     >
-      <section className="mx-auto w-full max-w-6xl">
+      <section className="mx-auto  max-w-6xl">
         <header
           className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
         >
@@ -657,8 +779,270 @@ export default function ProgramProfileDetailsPage() {
             />
           </div>
         </DetailsSection>
+
+
+        {actionSuccess && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-700">
+            <CheckCircle2 size={20} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold leading-6">
+              {actionSuccess}
+            </p>
+          </div>
+        )}
+
+
+        {actionError && !actionDialog && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+            <AlertCircle size={20} className="mt-0.5 shrink-0" />
+            <p className="text-sm font-semibold leading-6">
+              {actionError}
+            </p>
+          </div>
+        )}
+
+
+        {areRolesLoaded &&
+          isPendingWorkflowStatus(profile.status) && (
+          <section className="mb-6 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-gray-800">
+                عملیات گردش‌کار
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-gray-500">
+                {workflowAccess.message}
+              </p>
+            </div>
+
+            {(workflowAccess.canApprove || workflowAccess.canReturn) ? (
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {workflowAccess.canApprove && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError("");
+                      setActionDialog("approve");
+                    }}
+                    disabled={isSubmittingAction}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#007fcf] px-4 text-sm font-semibold text-white transition hover:bg-[#006fb5] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={18} />
+                    تأیید و ارسال
+                  </button>
+                )}
+
+                {workflowAccess.canReturn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActionError("");
+                      setReturnReason("");
+                      setActionDialog("return");
+                    }}
+                    disabled={isSubmittingAction}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <RotateCcw size={18} />
+                    بازگشت به مرحله قبل
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="shrink-0 text-xs font-medium text-amber-700">
+                برای نقش شما اقدامی وجود ندارد.
+              </p>
+            )}
+          </section>
+        )}
       </section>
+
+      {actionDialog && (
+        <WorkflowActionModal
+          action={actionDialog}
+          returnReason={returnReason}
+          error={actionError}
+          isSubmitting={isSubmittingAction}
+          onReasonChange={(value) => {
+            setReturnReason(value);
+            setActionError("");
+          }}
+          onClose={() => {
+            if (isSubmittingAction) {
+              return;
+            }
+
+            setActionDialog(null);
+            setActionError("");
+            setReturnReason("");
+          }}
+          onConfirm={() =>
+            void executeWorkflowAction(actionDialog)
+          }
+        />
+      )}
     </main>
+  );
+}
+
+
+interface WorkflowActionModalProps {
+  action: "approve" | "return";
+  returnReason: string;
+  error: string;
+  isSubmitting: boolean;
+  onReasonChange: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+
+function WorkflowActionModal({
+  action,
+  returnReason,
+  error,
+  isSubmitting,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}: WorkflowActionModalProps) {
+  const isApprove =
+    action === "approve";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/45 p-4 backdrop-blur-[1px]"
+      role="presentation"
+      onMouseDown={(event: {
+        target: EventTarget;
+        currentTarget: EventTarget;
+      }) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workflow-modal-title"
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl"
+      >
+        <header className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span
+              className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                isApprove
+                  ? "bg-blue-50 text-[#007fcf]"
+                  : "bg-amber-50 text-amber-700"
+              }`}
+            >
+              {isApprove ? (
+                <CheckCircle2 size={21} />
+              ) : (
+                <RotateCcw size={21} />
+              )}
+            </span>
+
+            <div>
+              <h2
+                id="workflow-modal-title"
+                className="font-bold text-gray-900"
+              >
+                {isApprove
+                  ? "تأیید شناسنامه"
+                  : "بازگشت به مرحله قبل"}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-gray-500">
+                {isApprove
+                  ? "آیا از تأیید و ارسال شناسنامه به مرحله بعد مطمئن هستید؟"
+                  : "دلیل بازگشت را بنویسید تا شناسنامه برای اصلاح به مرحله قبل ارسال شود."}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            aria-label="بستن"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X size={20} />
+          </button>
+        </header>
+
+        <div className="px-5 py-4">
+          {!isApprove && (
+            <div>
+              <label
+                htmlFor="return-reason"
+                className="mb-2 block text-sm font-semibold text-gray-700"
+              >
+                دلیل بازگشت
+                <span className="mr-1 text-red-500">*</span>
+              </label>
+              <textarea
+                id="return-reason"
+                autoFocus
+                value={returnReason}
+                onChange={(event: {
+                  target: { value: string };
+                }) =>
+                  onReasonChange(event.target.value)
+                }
+                rows={4}
+                disabled={isSubmitting}
+                placeholder="دلیل بازگشت شناسنامه را وارد کنید..."
+                className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm leading-7 text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-[#007fcf] focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-3 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <p className="leading-6">{error}</p>
+            </div>
+          )}
+        </div>
+
+        <footer className="flex flex-col-reverse gap-2 border-t border-gray-100 bg-gray-50 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="h-10 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            انصراف
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={
+              isSubmitting ||
+              (!isApprove && !returnReason.trim())
+            }
+            className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              isApprove
+                ? "bg-[#007fcf] hover:bg-[#006fb5]"
+                : "bg-amber-600 hover:bg-amber-700"
+            }`}
+          >
+            {isSubmitting ? (
+              <LoaderCircle size={18} className="animate-spin" />
+            ) : isApprove ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <RotateCcw size={18} />
+            )}
+            {isSubmitting
+              ? "در حال ارسال..."
+              : isApprove
+                ? "بله، تأیید شود"
+                : "ثبت دلیل و بازگشت"}
+          </button>
+        </footer>
+      </section>
+    </div>
   );
 }
 
@@ -677,10 +1061,10 @@ function DetailsSection({
 }: DetailsSectionProps) {
   return (
     <section
-      className="mb-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+      className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm"
     >
       <header
-        className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-5 py-4 font-bold text-gray-800"
+        className="flex items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800"
       >
         <span className="text-[#007fcf]">
           {icon}
@@ -689,7 +1073,7 @@ function DetailsSection({
         {title}
       </header>
 
-      <div className="p-5">
+      <div className="p-4">
         {children}
       </div>
     </section>
@@ -709,72 +1093,24 @@ function SpecificationsTable({
 }: {
   items: SpecificationItem[];
 }) {
-  const rows:
-    SpecificationItem[][] = [];
-
-  for (
-    let index = 0;
-    index < items.length;
-    index += 3
-  ) {
-    rows.push(
-      items.slice(
-        index,
-        index + 3
-      )
-    );
-  }
-
   return (
-    <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[840px] table-fixed border-collapse">
-        <tbody>
-          {rows.map(
-            (row, rowIndex) => (
-              <tr
-                key={rowIndex}
-                className="border-t border-gray-200 first:border-t-0"
-              >
-                {row.map(
-                  (item) => (
-                    <td
-                      key={item.label}
-                      className="w-1/3 border-l border-gray-200 px-5 py-4 align-top last:border-l-0"
-                    >
-                      <p className="text-xs font-semibold text-gray-500">
-                        {item.label}
-                      </p>
-
-                      <div
-                        className="mt-2 break-words text-sm font-semibold leading-7 text-gray-800"
-                        dir={
-                          item.ltr
-                            ? "ltr"
-                            : "rtl"
-                        }
-                      >
-                        {item.value}
-                      </div>
-                    </td>
-                  )
-                )}
-
-                {Array.from({
-                  length:
-                    3 - row.length,
-                }).map(
-                  (_, emptyIndex) => (
-                    <td
-                      key={`empty-${emptyIndex}`}
-                      className="w-1/3 border-l border-gray-200 px-5 py-4 last:border-l-0"
-                    />
-                  )
-                )}
-              </tr>
-            )
-          )}
-        </tbody>
-      </table>
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-gray-200 bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className="flex min-h-11 items-center gap-2 bg-white px-3 py-2.5"
+        >
+          <span className="shrink-0 text-xs font-medium text-gray-500">
+            {item.label}:
+          </span>
+          <div
+            className="min-w-0 break-words text-sm font-semibold leading-6 text-gray-800"
+            dir={item.ltr ? "ltr" : "rtl"}
+          >
+            {item.value}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -989,14 +1325,6 @@ function isProgramProfileResponse(
 }
 
 
-/*
- * طبق مستند ProfileResponse شناسه شبکه و گروه
- * قطعی است؛ با این حال برخی نسخه‌های Backend
- * عنوان نمایشی را نیز در یکی از کلیدهای زیر
- * برمی‌گردانند. در این صفحه فقط عنوان نمایش
- * داده می‌شود و شناسه به‌عنوان جایگزین استفاده
- * نخواهد شد.
- */
 function getNetworkName(
   profile: ProgramProfileResponse
 ): string {
@@ -1116,6 +1444,229 @@ function getProgramName(
   return `برنامه شماره ${toPersianNumber(
     profile.planId
   )}`;
+}
+
+
+interface WorkflowAccess {
+  canApprove: boolean;
+  canReturn: boolean;
+  message: string;
+}
+
+
+const EMPTY_WORKFLOW_ACCESS:
+  WorkflowAccess = {
+  canApprove: false,
+  canReturn: false,
+  message:
+    "اطلاعات گردش‌کار در حال بررسی است.",
+};
+
+
+function getWorkflowAccess(
+  profile: ProgramProfileResponse,
+  roles: string[]
+): WorkflowAccess {
+  if (!isPendingWorkflowStatus(profile.status)) {
+    return {
+      canApprove: false,
+      canReturn: false,
+      message:
+        "این شناسنامه در مرحله قابل اقدام قرار ندارد.",
+    };
+  }
+
+  const normalizedRoles =
+    new Set(
+      roles.map(normalizeRole)
+    );
+
+  const isAdmin =
+    normalizedRoles.has("admin");
+
+  let requiredRole = "";
+  let requiredRoleTitle = "";
+
+  switch (profile.status) {
+    case 10:
+      requiredRole =
+        "networkgroupmanager";
+      requiredRoleTitle =
+        "مدیر گروه شبکه";
+      break;
+
+    case 20: {
+      const programType =
+        normalizeProgramType(
+          profile.programType
+        );
+
+      if (programType === 10) {
+        requiredRole =
+          "livesupervisor";
+        requiredRoleTitle =
+          "ناظر برنامه زنده";
+      } else if (programType === 20) {
+        requiredRole =
+          "supervisor";
+        requiredRoleTitle =
+          "ناظر برنامه ضبطی";
+      } else {
+        return {
+          canApprove: isAdmin,
+          canReturn: false,
+          message:
+            "نوع برنامه معتبر نیست؛ programType باید برای برنامه زنده ۱۰ و برای برنامه ضبطی ۲۰ باشد.",
+        };
+      }
+      break;
+    }
+
+    case 30:
+      requiredRole =
+        "broadcastmanager";
+      requiredRoleTitle =
+        "مدیر پخش";
+      break;
+
+    case 40:
+      requiredRole =
+        "planmanager";
+      requiredRoleTitle =
+        "مدیر طرح و برنامه‌ریزی";
+      break;
+  }
+
+  const hasStageRole =
+    normalizedRoles.has(
+      requiredRole
+    );
+  const canAct =
+    isAdmin || hasStageRole;
+  const canReturn =
+    canAct && profile.status !== 20;
+
+  return {
+    canApprove: canAct,
+    canReturn,
+    message:
+      profile.status === 20
+        ? `مرحله جاری متعلق به ${requiredRoleTitle} است. در مرحله ناظر فقط تأیید مجاز است.`
+        : `مرحله جاری متعلق به ${requiredRoleTitle} است. تأیید یا بازگشت با ثبت دلیل امکان‌پذیر است.`,
+  };
+}
+
+
+function isPendingWorkflowStatus(
+  status: ProgramProfileStatus
+): status is 10 | 20 | 30 | 40 {
+  return (
+    status === 10 ||
+    status === 20 ||
+    status === 30 ||
+    status === 40
+  );
+}
+
+
+function normalizeProgramType(
+  value: unknown
+): 10 | 20 | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  return numericValue === 10 || numericValue === 20
+    ? numericValue
+    : null;
+}
+
+
+function readCurrentUserRoles(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  for (const key of [
+    "pmd-user-session",
+    "userInfo",
+    "user-info",
+    "auth-user",
+  ]) {
+    try {
+      const rawValue =
+        window.localStorage.getItem(key);
+
+      if (!rawValue) {
+        continue;
+      }
+
+      const parsedValue =
+        JSON.parse(rawValue) as unknown;
+
+      if (!isRecord(parsedValue)) {
+        continue;
+      }
+
+      const possibleContainers: unknown[] = [
+        parsedValue,
+        parsedValue.user,
+        parsedValue.data,
+      ];
+
+      for (const container of possibleContainers) {
+        if (!isRecord(container)) {
+          continue;
+        }
+
+        const rawRoles =
+          container.roles ??
+          container.role;
+
+        if (Array.isArray(rawRoles)) {
+          const result = rawRoles.filter(
+            (role): role is string =>
+              typeof role === "string" &&
+              role.trim().length > 0
+          );
+
+          if (result.length > 0) {
+            return result;
+          }
+        }
+
+        if (
+          typeof rawRoles === "string" &&
+          rawRoles.trim()
+        ) {
+          return rawRoles
+            .split(",")
+            .map((role) => role.trim())
+            .filter(Boolean);
+        }
+      }
+    } catch (storageError) {
+      console.warn(
+        `Invalid auth data in localStorage key ${key}:`,
+        storageError
+      );
+    }
+  }
+
+  return [];
+}
+
+
+function normalizeRole(
+  value: string
+): string {
+  return value
+    .trim()
+    .replace(/[\s_-]/g, "")
+    .toLowerCase();
 }
 
 

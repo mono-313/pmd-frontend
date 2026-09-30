@@ -376,7 +376,7 @@ export default function ProgramProfileReviewInboxPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className=" min-w-[950px] text-sm">
+              <table className="w-full min-w-[950px] text-sm">
                 <thead className="bg-gray-50 text-gray-600">
                   <tr>
                     <TableHead>ردیف</TableHead>
@@ -854,60 +854,58 @@ function isVisibleInInbox(
   }
 
   const normalizedRoles =
-    roles.map(normalizeRole);
+    new Set(
+      roles.map(normalizeRole)
+    );
 
   if (
-    normalizedRoles.includes(
+    normalizedRoles.has(
       "admin"
     )
   ) {
     return true;
   }
 
-  if (
-    normalizedRoles.includes(
+  if (profile.status === 10) {
+    return normalizedRoles.has(
       "networkgroupmanager"
-    )
-  ) {
-    return profile.status ===
-     10;
+    );
   }
 
-  if (
-    normalizedRoles.includes(
-      "supervisor"
-    ) ||
-    normalizedRoles.includes(
-      "livesupervisor"
-    )
-  ) {
-    return profile.status ===
-      20;
+  if (profile.status === 20) {
+    const programType =
+      normalizeProgramType(
+        profile.programType
+      );
+
+    if (programType === 10) {
+      return normalizedRoles.has(
+        "livesupervisor"
+      );
+    }
+
+    if (programType === 20) {
+      return normalizedRoles.has(
+        "supervisor"
+      );
+    }
+
+    return false;
   }
 
-  if (
-    normalizedRoles.includes(
+  if (profile.status === 30) {
+    return normalizedRoles.has(
       "broadcastmanager"
-    )
-  ) {
-    return profile.status ===
-      30;
+    );
   }
 
-  if (
-    normalizedRoles.includes(
+  if (profile.status === 40) {
+    return normalizedRoles.has(
       "planmanager"
-    )
-  ) {
-    return profile.status ===
-      40;
+    );
   }
 
-  /*
-   * اگر localStorage قدیمی یا ناقص باشد، کارتابل را
-   * اشتباهاً خالی نکن. Backend همچنان دسترسی عملیات را کنترل می‌کند.
-   */
-  return true;
+  return false;
 }
 
 
@@ -918,6 +916,7 @@ function readCurrentUserRoles(): string[] {
 
   for (
     const key of [
+      "pmd-user-session",
       "userInfo",
       "user-info",
       "auth-user",
@@ -940,19 +939,42 @@ function readCurrentUserRoles(): string[] {
         continue;
       }
 
-      const rawRoles =
-        value.roles ??
-        value.role;
+      const possibleContainers: unknown[] = [
+        value,
+        value.user,
+        value.data,
+      ];
 
-      if (Array.isArray(rawRoles)) {
-        return rawRoles.filter(
-          (role): role is string =>
-            typeof role === "string"
-        );
-      }
+      for (const container of possibleContainers) {
+        if (!isRecord(container)) {
+          continue;
+        }
 
-      if (typeof rawRoles === "string") {
-        return [rawRoles];
+        const rawRoles =
+          container.roles ??
+          container.role;
+
+        if (Array.isArray(rawRoles)) {
+          const result = rawRoles.filter(
+            (role): role is string =>
+              typeof role === "string" &&
+              role.trim().length > 0
+          );
+
+          if (result.length > 0) {
+            return result;
+          }
+        }
+
+        if (
+          typeof rawRoles === "string" &&
+          rawRoles.trim()
+        ) {
+          return rawRoles
+            .split(",")
+            .map((role) => role.trim())
+            .filter(Boolean);
+        }
       }
     } catch (error) {
       console.warn(
@@ -973,6 +995,22 @@ function normalizeRole(
     .trim()
     .replace(/[\s_-]/g, "")
     .toLowerCase();
+}
+
+
+function normalizeProgramType(
+  value: unknown
+): 10 | 20 | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  return numericValue === 10 || numericValue === 20
+    ? numericValue
+    : null;
 }
 
 
