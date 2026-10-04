@@ -23,6 +23,7 @@ import type {
   ProgramProfileResponse,
   ProgramProfileStatus,
 } from "@/app/types/program-profile";
+import { string } from "zod";
 
 
 const API_PAGE_SIZE = 100;
@@ -873,18 +874,19 @@ function isVisibleInInbox(
   }
 
   if (profile.status === 20) {
+    
     const programType =
-      normalizeProgramType(
-        profile.programType
+      normalizeProductionMethod(
+        profile.productionMethod
       );
 
-    if (programType === 10) {
+    if (programType === "زنده") {
       return normalizedRoles.has(
         "livesupervisor"
       );
     }
 
-    if (programType === 20) {
+    if (programType === "ضبطی") {
       return normalizedRoles.has(
         "supervisor"
       );
@@ -893,6 +895,7 @@ function isVisibleInInbox(
     return false;
   }
 
+  
   if (profile.status === 30) {
     return normalizedRoles.has(
       "broadcastmanager"
@@ -997,19 +1000,18 @@ function normalizeRole(
     .toLowerCase();
 }
 
-
-function normalizeProgramType(
+function normalizeProductionMethod(
   value: unknown
-): 10 | 20 | null {
-  const numericValue =
-    typeof value === "number"
-      ? value
-      : typeof value === "string" && value.trim()
-        ? Number(value)
-        : Number.NaN;
+): "زنده" | "ضبطی" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
 
-  return numericValue === 10 || numericValue === 20
-    ? numericValue
+  const normalizedValue = value.trim();
+
+  return normalizedValue === "زنده" ||
+    normalizedValue === "ضبطی"
+    ? normalizedValue
     : null;
 }
 
@@ -1027,6 +1029,7 @@ function getStatusLabel(
         profile.status
       ] ?? profile.status;
 }
+
 
 
 function countByStatus(

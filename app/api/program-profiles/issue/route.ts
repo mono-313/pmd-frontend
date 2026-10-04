@@ -12,8 +12,8 @@ import {
 
 import type {
   IssueProgramProfileRequest,
-  ProfileCrewMemberData,
-  ProfileItemData,
+  IssueProfileCrewMemberRequest,
+  IssueProfileItemRequest,
 } from "@/app/types/program-profile";
 
 
@@ -237,6 +237,13 @@ export async function POST(
     }
 
 
+    // نوع برنامه در سرور از نحوه تولید محاسبه می‌شود.
+    // مقدار programType دریافتی از مرورگر مبنای تصمیم نیست.
+    const programInfo = resolveProgramType(productionMethod);
+    if (programInfo === null) {
+      return badRequest("نحوه تولید باید زنده، ضبطی یا تولیدی باشد.");
+    }
+
     if (!occasion) {
       return badRequest(
         "مناسبت الزامی است."
@@ -356,6 +363,9 @@ export async function POST(
       broadcastDate,
 
       productionMethod,
+
+      programType: programInfo.programType,
+      programTypeName: programInfo.programTypeName,
 
       occasion,
 
@@ -594,7 +604,7 @@ function normalizeCrewMembers(
   | {
       ok: true;
       items:
-        ProfileCrewMemberData[];
+        IssueProfileCrewMemberRequest[];
     }
   | {
       ok: false;
@@ -615,7 +625,7 @@ function normalizeCrewMembers(
 
 
   const items:
-    ProfileCrewMemberData[] = [];
+    IssueProfileCrewMemberRequest[] = [];
 
 
   for (
@@ -762,7 +772,7 @@ function normalizeProgramItems(
   | {
       ok: true;
       items:
-        ProfileItemData[];
+        IssueProfileItemRequest[];
     }
   | {
       ok: false;
@@ -783,7 +793,7 @@ function normalizeProgramItems(
 
 
   const items:
-    ProfileItemData[] = [];
+    IssueProfileItemRequest[] = [];
 
 
   for (
@@ -1227,4 +1237,26 @@ function isRecord(
     value !== null &&
     !Array.isArray(value)
   );
+}
+
+/** نگاشت نحوه تولید فارسی به نوع برنامه در قرارداد صدور. */
+function resolveProgramType(
+  value: string
+): { programType: 10 | 20; programTypeName: string } | null {
+  const normalized = value
+    .replace(/ي/g, "ی")
+    .replace(/ك/g, "ک")
+    .replace(/\u200c/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized === "زنده") {
+    return { programType: 10, programTypeName: "زنده" };
+  }
+
+  if (["ضبطی", "تولیدی", "ضبطی یا تولیدی", "تولیدی یا ضبطی"].includes(normalized)) {
+    return { programType: 20, programTypeName: "ضبطی یا تولیدی" };
+  }
+
+  return null;
 }

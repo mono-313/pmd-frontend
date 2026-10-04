@@ -1497,16 +1497,16 @@ function getWorkflowAccess(
 
     case 20: {
       const programType =
-        normalizeProgramType(
-          profile.programType
+        normalizeProductionMethod(
+          profile.productionMethod
         );
 
-      if (programType === 10) {
+      if (programType === "live") {
         requiredRole =
           "livesupervisor";
         requiredRoleTitle =
           "ناظر برنامه زنده";
-      } else if (programType === 20) {
+      } else if (programType === "recorded") {
         requiredRole =
           "supervisor";
         requiredRoleTitle =
@@ -1516,7 +1516,7 @@ function getWorkflowAccess(
           canApprove: isAdmin,
           canReturn: false,
           message:
-            "نوع برنامه معتبر نیست؛ programType باید برای برنامه زنده ۱۰ و برای برنامه ضبطی ۲۰ باشد.",
+            "با توجه به نوع برنامه ناظر متناظر اقدام نماید",
         };
       }
       break;
@@ -1566,22 +1566,6 @@ function isPendingWorkflowStatus(
     status === 30 ||
     status === 40
   );
-}
-
-
-function normalizeProgramType(
-  value: unknown
-): 10 | 20 | null {
-  const numericValue =
-    typeof value === "number"
-      ? value
-      : typeof value === "string" && value.trim()
-        ? Number(value)
-        : Number.NaN;
-
-  return numericValue === 10 || numericValue === 20
-    ? numericValue
-    : null;
 }
 
 
@@ -1809,7 +1793,7 @@ async function loadProfileDisplayData(
     getNetworkGroupName(profile);
 
   const backendProgramTypeName =
-    normalizeProgramTypeName(
+    normalizeProductionMethod(
       profile.programTypeName
     );
 
@@ -2088,7 +2072,7 @@ async function loadProfileDisplayData(
 
     if (programTypeName === "—") {
       const forecastTypeName =
-        normalizeProgramTypeName(
+        normalizeProductionMethod(
           forecastRecord.programTypeName
         );
 
@@ -2117,42 +2101,27 @@ async function loadProfileDisplayData(
   };
 }
 
-
-function normalizeProgramTypeName(
+function normalizeProductionMethod(
   value: unknown
-): string | null {
-  const title =
-    readNonEmptyString(value);
-
-  if (
-    !title ||
-    /^0+$/.test(
-      normalizeDigits(title)
-    )
-  ) {
+): "live" | "recorded" | null {
+  if (typeof value !== "string") {
     return null;
   }
 
-  const normalizedTitle =
-    title.toLowerCase();
+  const normalizedValue = value.trim();
 
-  if (
-    normalizedTitle === "live" ||
-    title.includes("زنده")
-  ) {
-    return "زنده";
+  if (normalizedValue.includes("زنده")) {
+    return "live";
   }
 
   if (
-    normalizedTitle === "recorded" ||
-    normalizedTitle === "production" ||
-    title.includes("ضبط") ||
-    title.includes("تولید")
+    normalizedValue.includes("ضبط") ||
+    normalizedValue.includes("تولید")
   ) {
-    return "ضبطی یا تولیدی";
+    return "recorded";
   }
 
-  return title;
+  return null;
 }
 
 

@@ -1228,6 +1228,37 @@ function buildIssueRequest(
     );
   }
 
+  /*
+   * تعیین نوع برنامه از روی نحوه تولید:
+   * 10 = زنده
+   * 20 = ضبطی یا تولیدی
+   */
+  const productionMethod =
+    getTrimmedString(
+      data.productionMethod
+    );
+
+  let programType: 10 | 20;
+  let programTypeName: string;
+
+  if (
+    productionMethod.includes("زنده")
+  ) {
+    programType = 10;
+    programTypeName = "زنده";
+  } else if (
+    productionMethod.includes("ضبط") ||
+    productionMethod.includes("تولید")
+  ) {
+    programType = 20;
+    programTypeName =
+      "ضبطی یا تولیدی";
+  } else {
+    throw new Error(
+      "نحوه تولید برنامه معتبر نیست."
+    );
+  }
+
   const items =
     wizardData.items.map(
       (item, index) => {
@@ -1259,7 +1290,6 @@ function buildIssueRequest(
 
         return {
           itemName,
-
           productionType,
 
           duration:
@@ -1296,28 +1326,6 @@ function buildIssueRequest(
       })
     );
 
-
-
-    if (
-  data.programType !== 10 &&
-  data.programType !== 20
-) {
-  throw new Error(
-    "نوع برنامه معتبر نیست."
-  );
-}
-
-
-const programTypeName =
-  getTrimmedString(
-    data.programTypeName
-  ) ||
-  (
-    data.programType === 10
-      ? "زنده"
-      : "ضبطی یا تولیدی"
-  );
-
   return {
     forecastId:
       getTrimmedString(
@@ -1347,17 +1355,13 @@ const programTypeName =
         )
       ),
 
-    productionMethod:
-      getTrimmedString(
-        data.productionMethod
-      ),
+    productionMethod,
 
-        programType:
-          data.programType,
+    programType,
 
-        programTypeName,
+    programTypeName,
 
-        occasion:
+    occasion:
       getTrimmedString(
         data.occasion
       ),
