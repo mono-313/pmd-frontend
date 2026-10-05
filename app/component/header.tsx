@@ -2,12 +2,14 @@
 
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 import {
+  Bell,
   UserRound,
   ChevronDown,
   LogOut,
@@ -57,11 +59,13 @@ export default function Header() {
         new Date(parsedUser.expiresAt);
 
       const isExpired =
-        expirationDate.getTime() <
+        !Number.isFinite(expirationDate.getTime()) ||
+        expirationDate.getTime() <=
         Date.now();
 
       if (isExpired) {
-        localStorage.removeItem("userInfo");
+        localStorage.removeItem("pmd-user-session");
+      localStorage.removeItem("userInfo");
 
         setUserInfo(null);
         setIsLoading(false);
@@ -71,6 +75,9 @@ export default function Header() {
         return;
       }
 
+      if (!parsedUser || typeof parsedUser.userName !== "string" ||
+          !Array.isArray(parsedUser.roles) || !parsedUser.roles.every(role => typeof role === "string") ||
+          !Array.isArray(parsedUser.networkIds)) throw new Error("Invalid session");
       setUserInfo(parsedUser);
     } catch (error) {
       console.error(
@@ -93,15 +100,20 @@ export default function Header() {
        * این Route باید کوکی‌های HttpOnly را
        * حذف و Refresh Token را Revoke کند.
        */
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
       });
+      if (!response.ok) throw new Error("Logout failed");
     } catch (error) {
       console.error(
         "Logout request failed:",
         error
       );
-    } finally {
+      window.alert("خروج از حساب انجام نشد؛ دوباره تلاش کنید.");
+      return;
+    }
+    {
+      localStorage.removeItem("pmd-user-session");
       localStorage.removeItem("userInfo");
 
       setUserInfo(null);
@@ -153,7 +165,9 @@ export default function Header() {
           موج پلاس +
         </div>
 
-        {/* پروفایل */}
+        {/* اعلان‌ها و پروفایل */}
+        <div className="flex items-center gap-2">
+        {userInfo && <InboxNotifications user={userInfo} />}
         <div className="relative">
           <button
             type="button"
@@ -399,6 +413,7 @@ export default function Header() {
             </div>
           )}
         </div>
+        </div>
       </div>
     </header>
   );
@@ -410,16 +425,522 @@ export default function Header() {
 function getRoleTitle(
   role: string | undefined
 ) {
-  const roleTitles: Record<string, string> = {
-    Admin: "مدیر سامانه",
-    ProgramGroup: "گروه برنامه‌ساز",
-    Expert: "کارشناس",
-    User: "کاربر",
-  };
+  const roleTitles = ROLE_TITLES;
 
   if (!role) {
     return "بدون نقش";
   }
 
   return roleTitles[role] ?? role;
+}
+
+/* اعلان‌های کارتابل: دسترسی نهایی همیشه با Backend و توکن است. */
+type InboxRow = Record<string, unknown> & { id: string };
+type InboxNotice = 
+{ key: string; title: string; label: string; 
+  href: string | null };
+const ROLE_TITLES: Record<string, string> = {
+  Admin: "مدیر سامانه", NetworkManager: "مدیر شبکه",
+  NetworkGroupManager: "مدیر گروه برنامه‌ساز", Providers: "تهیه‌کننده",
+  Supervisor: "ناظر ضبطی", LiveSupervisor: "ناظر زنده",
+  BroadcastManager: "مدیر پخش", PlanManager: "مدیر طرح و برنامه",
+  ProgramGroup: "گروه برنامه‌ساز", Expert: "کارشناس", User: "کاربر",
+};
+function objectValue(value: unknown): 
+value is Record<string, unknown> {
+  return typeof value === "object" && 
+  value !== null && !Array.isArray(value);
+}
+
+function normalizedRole(value: string) {
+  return value.trim().toLowerCase();
+}
+function profileStage(value: unknown): number | null {
+  const names: Record<string, number> = {
+    Draft: 0, PendingGroupManager: 10, PendingSupervisor: 20,
+    PendingBroadcastManager: 30, PendingPlanningManager: 40,
+    Approved: 50, ReturnedForEdit: 60,
+  };
+  if (typeof value === "string" && value in names) 
+    return names[value];
+  const number = typeof value === "number" ? value :
+    typeof value === "string" && /^\d+$/.test(value) 
+    ? Number(value) : NaN;
+  return [0, 10, 20, 30, 40, 50, 60].includes(number) 
+  ? number : null;
+}
+function productionKind(row: InboxRow): 10 | 20 | null {
+  // هماهنگ با کارتابل فعلی: productionMethod اولویت دارد؛ عدد صفر ضبطی نیست.
+  const method = typeof row.productionMethod === "string"
+    ? row.productionMethod.trim().replace(/ي/g, "ی").replace(/ك/g, "ک") : "";
+  if (method === "زنده") return 10;
+  if (["ضبطی", "تولیدی", "ضبطی (تولیدی)"].includes(method)) return 20;
+  const value = Number(row.programType);
+  return value === 10 || value === 20 ? value : null;
+}
+
+function ownRecord(row: InboxRow, user: UserSession): 
+boolean {
+  // نام کاربری طبق قرارداد ورود یکتا است؛ صرف داشتن نقش Providers مالکیت نیست.
+  const name = row.createdByUserName ?? row.userCreatorName;
+  return typeof name === "string" && 
+  name.trim().toLowerCase() === user.userName.trim().toLowerCase();
+}
+
+function makeNotice
+( row: InboxRow,
+  kind: "forecast" | "profile", 
+  user: UserSession):
+ InboxNotice | null 
+ {
+  const roles = new Set(user.roles.map(normalizedRole));
+  const admin = roles.has("admin");
+  let label = "";
+  let returned = false;
+  if (kind === "forecast") {
+    const status = String(row.status);
+    if (["PendingReview", "2"].includes(status) &&
+     (admin || roles.has("networkgroupmanager"))) {
+      label = "پیش‌بینی منتظر بررسی";
+      }
+      
+      if (
+  kind === "forecast" &&
+  ["Approved", "3"].includes(String(row.status)) &&
+  user.roles.some(
+    role => normalizedRole(role) === "providers"
+  ) &&
+  ownRecord(row, user)
+) {
+  return {
+    key: `forecast:${row.id}`,
+    title: String(row.mainTopic || "پیش‌بینی تأییدشده"),
+    label: "پیش‌بینی شما تأیید شد",
+    href: `/approved-forecasts?forecastId=${encodeURIComponent(row.id)}`,
+  };
+}
+      
+      else if (["ReturnedForEdit", "5"].includes(status) 
+      && roles.has("providers") && ownRecord(row, user))
+     {
+      label = "پیش‌بینی برگشتی؛ نیازمند اصلاح"; 
+      returned = true;
+    }
+  } else {
+    const status = profileStage(row.status);
+    const assigned = status === 10 
+    ? roles.has("networkgroupmanager") :
+      status === 20 
+      ? (productionKind(row) === 10 
+      ? roles.has("livesupervisor") :
+        productionKind(row) === 20 
+        ? roles.has("supervisor") : false) :
+      status === 30 
+      ? roles.has("broadcastmanager") 
+      : status === 40 ? roles.has("planmanager") 
+      : false;
+    if ([10, 20, 30, 40].includes(status ?? -1) 
+      && (admin || assigned)) {
+      const stages: 
+      Record<number, string> = 
+      {10: "مدیر گروه", 20: "ناظر", 30: "مدیر پخش", 
+        40: "مدیر طرح و برنامه"};
+      label = `شناسنامه منتظر بررسی ${stages[status!]}`;
+    } 
+    else if 
+    (status === 60 && roles.has("providers") 
+    && ownRecord(row, user)) {
+      label = "شناسنامه برگشتی؛ نیازمند اصلاح"; 
+      returned = true;
+    }
+  }
+  if (!label) return null;
+  return {
+    key: `${kind}:${row.id}`, label,
+    title: typeof row.mainTopic === "string" 
+    && row.mainTopic.trim() ? 
+    row.mainTopic : "بدون عنوان موضوع",
+    // مسیر ویرایش تهیه‌کننده در فایل‌های ارسالی موجود نیست؛ مسیر حدسی نمی‌سازیم.
+    href: returned ? null : `${kind === "forecast" ? "/forecasts" : "/program-profiles"}/review/${encodeURIComponent(row.id)}`,
+  };
+}
+
+async function readInboxPages
+(path: string, signal: AbortSignal): 
+Promise<InboxRow[]> {
+  const rows = new Map<string, InboxRow>();
+  // Routeهای فعلی در نبود Pagination، totalPages=1 می‌سازند.
+  // تا صفحهٔ خالی پیش می‌رویم؛ به این عددِ جایگزین برای توقف اعتماد نمی‌کنیم.
+  for (let page = 1; page <= 200; page += 1) {
+    const url = new URL(path, window.location.origin);
+    url.searchParams.set("pageNumber", String(page));
+    url.searchParams.set("pageSize", "100");
+    const response = await fetch(url.pathname + url.search,
+       {
+      cache: "no-store", credentials: "same-origin", signal,
+      headers: { Accept: "application/json" },
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) 
+        throw new Error("نشست معتبر نیست؛ دوباره وارد شوید.");
+      if (response.status === 403) 
+        throw new Error("دسترسی به فهرست مجاز نیست.");
+      throw new Error(`دریافت اطلاعات ناموفق بود (${response.status}).`);
+    }
+
+    let body: unknown;
+    try { body = await response.json(); } 
+    catch { throw new Error
+      ("پاسخ سرویس JSON معتبر نیست."); }
+    if (!objectValue(body) || !Array.isArray(body.items)) 
+      throw new Error("ساختار فهرست معتبر نیست.");
+    if (body.items.length === 0) 
+      return [...rows.values()];
+
+    let added = 0;
+    for (const item of body.items) {
+      if (!objectValue(item) || 
+      typeof item.id !== "string" || 
+      !item.id || 
+      item.status === undefined)
+       {
+        throw new Error
+        ("شناسه یا وضعیت یک رکورد در پاسخ سرویس معتبر نیست.");
+      }
+      if (!rows.has(item.id)) added += 1;
+      rows.set(item.id, item as InboxRow);
+    }
+    if (added === 0) 
+      throw new Error
+    ("صفحه‌بندی سرویس تکراری است؛ شمارش کامل ممکن نشد.");
+  }
+  throw new Error
+  ("حجم کارتابل از سقف دریافت بیشتر است؛ شمارش کامل به سرویس اختصاصی نیاز دارد.");
+}
+
+function InboxNotifications
+({ user }: { user: UserSession }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const [notices, setNotices] = useState<InboxNotice[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const panel = useRef<HTMLDivElement>(null);
+  const roleKey = user.roles.map(normalizedRole).sort().join(",");
+  const canForecast = 
+  roleKey.split(",").some(role => 
+    ["admin", "networkgroupmanager", "providers"].includes(role));
+  const canProfile = 
+  roleKey.split(",").some(role => 
+    ["admin", "networkgroupmanager", "providers", "supervisor", "livesupervisor", "broadcastmanager", "planmanager"].includes(role));
+
+  useEffect(() => {
+    const dismiss = (event: MouseEvent) => { if (!panel.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", dismiss); 
+    document.addEventListener("keydown", escape);
+    return () => 
+      { document.removeEventListener("mousedown", dismiss);
+        document.removeEventListener("keydown", escape); 
+      };
+  }, 
+  []);
+
+  useEffect(() => 
+    { setOpen(false); }, 
+          [pathname]);
+  useEffect(() => {
+    let disposed = false;
+    let active: AbortController | null = null;
+    let timer: ReturnType<typeof setTimeout>;
+    const load = async () => {
+      if (active || disposed ||
+         document.visibilityState === "hidden") 
+         return;
+      clearTimeout(timer);
+      const controller = new AbortController();
+       active = controller;
+      const timeout = setTimeout(
+        () => controller.abort(), 60000);
+      setBusy(true);
+      const sources: { 
+        kind: "forecast" | "profile";
+         path: string; 
+         title: string }[] = [];
+      if (canForecast) sources.push(
+        { kind: "forecast", 
+          path: "/api/forecasts", 
+          title: "پیش‌بینی‌ها" 
+        });
+      if (canProfile) sources.push(
+        { kind: "profile", 
+          path: "/api/program-profiles", 
+          title: "شناسنامه‌ها" 
+        });
+      try {
+        const results = await Promise.allSettled
+        (sources.map(source =>
+           readInboxPages(source.path, controller.signal)));
+        if (disposed)
+           return;
+        const next: InboxNotice[] = []; 
+        const failures: string[] = [];
+        const profileIndex = sources.findIndex(
+  source => source.kind === "profile"
+);
+
+const profileResult = results[profileIndex];
+
+const profileRows =
+  profileResult?.status === "fulfilled"
+    ? profileResult.value
+    : null;
+
+// برای تشخیص «شناسنامه ندارد»، فهرست باید کامل و معتبر باشد.
+const canCheckIssuedProfiles =
+  profileRows !== null &&
+  profileRows.every(
+    profile =>
+      typeof profile.forecastId === "string" &&
+      profile.forecastId.trim().length > 0
+  );
+
+const issuedForecastIds = new Set(
+  (profileRows ?? []).map(profile =>
+    String(profile.forecastId ?? "").trim().toLowerCase()
+  )
+);
+
+if (profileRows !== null && !canCheckIssuedProfiles) {
+  failures.push(
+    "شناسهٔ پیش‌بینی در بعضی شناسنامه‌ها موجود نیست؛ اعلان آمادهٔ صدور فعلاً نمایش داده نمی‌شود."
+  );
+}
+        results.forEach((result, index) => {
+          const source = sources[index];
+          if (result.status === "fulfilled") {
+            result.value.forEach(row => {
+  const isApprovedForecast =
+    source.kind === "forecast" &&
+    ["Approved", "3"].includes(String(row.status));
+
+  if (isApprovedForecast) {
+    // اگر شناسنامه‌ها دریافت نشده‌اند، نمی‌توانیم
+    // با اطمینان بگوییم این پیش‌بینی شناسنامه ندارد.
+    if (!canCheckIssuedProfiles) return;
+
+    const alreadyIssued = issuedForecastIds.has(
+      row.id.trim().toLowerCase()
+    );
+
+    if (alreadyIssued) return;
+  }
+
+  const notice = makeNotice(row, source.kind, user);
+
+  if (notice) next.push(notice);
+});
+            if (source.kind === "profile"
+              && roleKey.split(",").some(
+                role => ["supervisor", "livesupervisor"].includes(role)) &&
+                result.value.some(
+                  row => profileStage(row.status) === 20 
+                  && productionKind(row) === null)) {
+              failures.push("نوع تولید بعضی شناسنامه‌های منتظر ناظر مشخص نیست؛ شمارش نیازمند بررسی است.");
+            }
+          } else failures.push(`${source.title}: ${controller.signal.aborted 
+            ? "زمان دریافت به پایان رسید." : 
+            result.reason instanceof Error ? 
+            result.reason.message : "دریافت ناموفق بود."}`);
+        });
+        setNotices(next);
+        setErrors(failures); 
+        setLoaded(true);
+      }
+       finally {
+        clearTimeout(timeout); 
+        active = null;
+        if (!disposed) { 
+          setBusy(false); 
+          timer = setTimeout(() => void load(), 120000); }
+      }
+    };
+    const refresh = () =>
+       { if (document.visibilityState === "visible") 
+        void load(); };
+    void load();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pmd-inbox-refresh", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      disposed = true;
+       clearTimeout(timer); 
+       active?.abort();
+      window.removeEventListener("focus", refresh); 
+      window.removeEventListener("pmd-inbox-refresh", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  },
+   [user,
+     roleKey,
+      canForecast,
+       canProfile,
+        pathname,
+         refreshKey]);
+  const count = notices.length.toLocaleString("fa-IR");
+
+  return <div ref={panel} className="relative" dir="rtl">
+    <button type="button"
+     aria-label=
+     {`اعلان‌ها${loaded && !errors.length ?
+       `، ${count} مورد` : ""}`} 
+       aria-expanded={open}
+      aria-controls="header-inbox" 
+      className="relative 
+                rounded-lg p-3 
+                hover:bg-white/20 
+                focus-visible:outline 
+                focus-visible:outline-2"
+      onClick={() => 
+      { setOpen(!open); 
+      if (!open && !busy) 
+      setRefreshKey(key => key + 1); 
+    }}>
+      <Bell size={23} />
+      {(errors.length > 0 
+        || notices.length > 0)
+         && <span 
+         className="absolute
+          -right-1 
+          -top-1 
+          min-w-5 
+          rounded-full 
+          bg-red-600 px-1 
+          text-center 
+          text-xs 
+          leading-5 
+          text-white">
+            {errors.length ? "!" : notices.length > 99 
+            ? "۹۹+" : count}
+            </span>}
+    </button>
+    
+    {open && 
+    <section 
+    id="header-inbox" 
+    aria-label="کارتابل اعلان‌ها" 
+    className="absolute 
+              left-0 z-50 
+              mt-3 
+              w-[min(23rem,calc(100vw-2rem))] 
+              overflow-hidden 
+              rounded-xl 
+              border border-gray-200 
+              bg-white text-right
+              text-gray-800
+              shadow-xl">
+      <div className="flex
+                     items-center 
+                     justify-between 
+                     border-b 
+                     p-4">
+        <strong>{roleKey.split(",").includes("admin") ?
+         "موارد در انتظار بررسی" : "در انتظار اقدام شما"}
+         </strong>
+        <button type="button" 
+        disabled={busy}
+         onClick=
+         {() => setRefreshKey(key => key + 1)} 
+         className="text-sm 
+                    text-blue-700 
+                    disabled:opacity-50">
+                      {busy ?
+                       "در حال دریافت…" : "به‌روزرسانی"}
+                       </button>
+      </div>
+      <div className="
+                    max-h-96 
+                    overflow-y-auto" 
+                    aria-live="polite" 
+                    aria-busy={busy}>
+        {errors.map(message =>
+           <p key={message} 
+           role="alert" 
+           className="border-b
+                      bg-amber-50 
+                      p-3 text-sm 
+                      text-amber-900">
+                        {message}
+                        </p>
+                      )}
+        {!loaded && 
+        <p className="p-4 text-sm">در حال دریافت اعلان‌ها…
+        </p>}
+        {loaded && 
+        !errors.length 
+        && 
+        !notices.length 
+        && 
+        <p className="p-4 text-sm
+                     text-gray-600">
+                      {canProfile || canForecast 
+                      ? "موردی برای اقدام شما وجود ندارد." 
+                      : "برای نقش شما مرحلهٔ بررسی تعریف نشده است."}
+                      </p>
+                      }
+        {notices.map(notice => 
+        <div key={notice.key} 
+        className="border-b last:border-0">
+          {notice.href 
+          ? <button type="button" 
+          className="w-full p-4 
+                    text-right 
+                    hover:bg-blue-50" 
+                    onClick={() => 
+                    { setOpen(false); 
+                    router.push(notice.href!);
+                     }}>
+            <span 
+            className="block text-xs text-blue-700">
+              {notice.label}
+              </span>
+              <span 
+              className="mt-1 block
+                         break-words 
+                         text-sm 
+                         font-semibold">
+                          {notice.title}
+                          </span>
+          </button> : 
+          <div className="p-4">
+            <p className="text-xs text-amber-700">
+              {notice.label}
+              </p>
+              <p className="mt-1 break-words
+                            text-sm
+                            font-semibold">
+                              {notice.title}
+              </p>
+              <p className="mt-1 text-xs
+                           text-gray-500">از فهرست موارد ثبت‌شدهٔ خودتان، اصلاح را انجام دهید.
+                           </p>
+                           </div>
+                           }
+        </div>)}
+      </div>
+      {loaded && 
+      <p className="border-t 
+                    p-3 text-xs 
+                    text-gray-500">
+                      {errors.length 
+                      ? 
+                      "شمارش کامل تأیید نشده است." :
+                       `${count} مورد؛ با انجام اقدام از فهرست خارج می‌شود.`}
+                       </p>}
+    </section>}
+  </div>;
 }

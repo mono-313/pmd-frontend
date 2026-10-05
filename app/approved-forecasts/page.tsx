@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -20,6 +21,7 @@ import {
 
 import {
   useRouter,
+  useSearchParams,
 } from "next/navigation";
 
 
@@ -65,6 +67,14 @@ interface IssuedProfileReference {
 
 
 export default function ApprovedForecastsPage() {
+  return (
+    <Suspense fallback={<div className="p-6">در حال دریافت موضوعات...</div>}>
+      <ApprovedForecastsContent />
+    </Suspense>
+  );
+}
+
+function ApprovedForecastsContent() {
   const router =
     useRouter();
 
@@ -179,12 +189,85 @@ const [
   setIssueSuccessMessage,
 ] = useState("");
 
+  // لینک اعلان فقط ردیف را پیدا می‌کند؛ پنجره صدور باز نمی‌شود.
+  const searchParams = useSearchParams();
+  const targetForecastId = 
+  searchParams.get("forecastId")?.trim() || "";
+  const [locatedTarget, setLocatedTarget] = useState("");
+  const [notificationError, setNotificationError] = useState("");
+  const scrolledTarget = useRef<string | null>(null);
+  const locatingTarget = Boolean(targetForecastId && locatedTarget 
+    !== targetForecastId);
+
+  useEffect(() => {
+    scrolledTarget.current = null;
+    setNotificationError("");
+    setLocatedTarget("");
+    if (!targetForecastId) 
+      return;
+
+    const controller = new AbortController();
+    let disposed = false;
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    // فقط هنگام ورود از اعلان، فیلتر تاریخ پاک می‌شود.
+    setFromDate(null);
+    setToDate(null);
+    setAppliedFromDate("");
+    setAppliedToDate("");
+
+    void findApprovedForecastPage(targetForecastId, controller.signal)
+      .then(page => {
+        if (disposed) return;
+        if (page === null) {
+          setNotificationError("پیش‌بینی این اعلان در موضوعات تأییدشدهٔ قابل دسترس پیدا نشد.");
+        } 
+        else {
+          setCurrentPage(page);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (disposed) 
+          return;
+        setNotificationError(controller.signal.aborted
+          ? "زمان جست‌وجوی ردیف به پایان رسید؛ دوباره تلاش کنید."
+          : cause instanceof Error ? cause.message 
+          : "پیداکردن ردیف اعلان انجام نشد.");
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (!disposed) setLocatedTarget(targetForecastId);
+      });
+
+    return () => {
+      disposed = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [targetForecastId]);
+
+  useEffect(() => {
+    if (!targetForecastId || locatingTarget || isLoading ||
+        scrolledTarget.current === targetForecastId ||
+        !forecasts.some(item => item.id === targetForecastId)) 
+        return;
+    const frame = requestAnimationFrame(() => {
+      const row = document.getElementById(`forecast-row-${targetForecastId}`);
+      if (!row) return;
+
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.focus({ preventScroll: true });
+      scrolledTarget.current = targetForecastId;
+    });
+    return () => cancelAnimationFrame(frame);
+  },
+   [targetForecastId, locatingTarget, isLoading, forecasts]);
+
   /*
    * دریافت فقط Forecastهای تأییدشده
    */
   const loadApprovedForecasts =
     useCallback(
-      async () => {
+      async (signal?: AbortSignal) => {
         try {
           setIsLoading(true);
           setError("");
@@ -225,6 +308,7 @@ const [
             await fetch(
               `/api/forecasts?${query.toString()}`,
               {
+                signal,
                 method:
                   "GET",
 
@@ -276,6 +360,8 @@ if (
   );
 }
 
+if (signal?.aborted) return;
+
 setForecasts(
   responseData.items as
     ForecastResponse[]
@@ -292,7 +378,8 @@ try {
     await fetch(
       "/api/program-profiles?pageNumber=1&pageSize=1000",
       {
-        method: "GET",
+        signal,
+                method: "GET",
 
         headers: {
           Accept:
@@ -313,6 +400,8 @@ try {
       profilesText
     );
 
+
+  if (signal?.aborted) return;
 
   if (!profilesResponse.ok) {
     console.error(
@@ -346,6 +435,7 @@ try {
     );
   }
 } catch (profilesError) {
+  if (signal?.aborted) return;
   console.error(
     "Load issued profiles error:",
     profilesError
@@ -368,6 +458,7 @@ if (
   setPagination(null);
 }
         } catch (loadError) {
+          if (signal?.aborted) return;
           setForecasts([]);
           setPagination(null);
           setIssuedProfiles({});
@@ -378,7 +469,7 @@ if (
               : "دریافت اطلاعات انجام نشد."
           );
         } finally {
-          setIsLoading(false);
+          if (!signal?.aborted) setIsLoading(false);
         }
       },
       [
@@ -466,8 +557,11 @@ if (
 
 
   useEffect(() => {
-    void loadApprovedForecasts();
-  }, [loadApprovedForecasts]);
+    if (locatingTarget) return;
+    const controller = new AbortController();
+    void loadApprovedForecasts(controller.signal);
+    return () => controller.abort();
+  }, [loadApprovedForecasts, locatingTarget]);
 
 
   useEffect(() => {
@@ -876,6 +970,12 @@ function handleProfileIssued(
         )}
 
 
+        {notificationError && (
+          <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+            {notificationError}
+          </p>
+        )}
+
         {error && (
           <div
             role="alert"
@@ -912,7 +1012,7 @@ function handleProfileIssued(
             shadow-sm
           "
         >
-          {isLoading ? (
+          {isLoading || locatingTarget ? (
             <div
               className="
                 flex
@@ -1018,13 +1118,13 @@ function handleProfileIssued(
                     ) => (
                       <tr
                         key={forecast.id}
-                        className="
-                          border-t
-                          border-gray-200
-                          text-sm
-                          transition
-                          hover:bg-blue-50/40
-                        "
+                        id={`forecast-row-${forecast.id}`}
+                        tabIndex={forecast.id === targetForecastId ? -1 : undefined}
+                        className={`border-t border-gray-200 text-sm transition ${
+                          forecast.id === targetForecastId
+                            ? "bg-amber-100 ring-2 ring-inset ring-amber-400"
+                            : "hover:bg-blue-50/40"
+                        }`}
                       >
                         <td className={cellClass}>
                           {(
@@ -1110,7 +1210,7 @@ function handleProfileIssued(
                               forecast.id
                             ]
                               ? "شناسنامه صادرشده"
-                              : "تأییدشده - آماده صدور"}
+                              : "تأییدشده-آماده صدور"}
                           </span>
                         </td>
 
@@ -1926,4 +2026,47 @@ function normalizeDigits(
           )
         )
     );
+}
+
+// همان اندازه صفحهٔ جدول؛ بدون تکیه بر Pagination جایگزینِ Route.
+async function findApprovedForecastPage(
+  forecastId: string,
+  signal: AbortSignal
+): Promise<number | null> {
+  const seen = new Set<string>();
+  for (let page = 1; page <= 200; page += 1) {
+    const query = new URLSearchParams({
+      status: "Approved", 
+      pageNumber: String(page), 
+      pageSize: "10",
+    });
+    const response = await 
+    fetch(`/api/forecasts?${query.toString()}`, {
+      cache: "no-store", signal, 
+      headers: 
+      { Accept: "application/json" 
+        },
+    });
+    const data: unknown = 
+    parseJsonResponse
+    (await response.text());
+    if (!response.ok)
+       throw new Error(getErrorMessage(data) ??
+       "دریافت موضوعات برای پیدا کردن ردیف انجام نشد.");
+    if (!isRecord(data) || !Array.isArray(data.items)) 
+      throw new Error("ساختار فهرست موضوعات معتبر نیست.");
+    if (data.items.length === 0) 
+      return null;
+    let added = 0;
+    for (const item of data.items) {
+      if (!isRecord(item) || typeof item.id !== "string" || !item.id) throw new Error("شناسه یک موضوع معتبر نیست.");
+      if (item.id === forecastId) 
+        return page;
+      if (!seen.has(item.id)) added += 1;
+      seen.add(item.id);
+    }
+    if (!added) 
+      throw new Error("صفحه‌بندی سرویس تکراری است؛ ردیف اعلان پیدا نشد.");
+  }
+  throw new Error("جست‌وجوی ردیف از سقف ۲۰۰ صفحه بیشتر شد.");
 }
