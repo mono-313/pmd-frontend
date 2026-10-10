@@ -251,7 +251,7 @@ const [
         !forecasts.some(item => item.id === targetForecastId)) 
         return;
     const frame = requestAnimationFrame(() => {
-      const row = document.getElementById(`forecast-row-${targetForecastId}`);
+    const row = document.getElementById(`forecast-row-${targetForecastId}`);
       if (!row) return;
 
       row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1480,13 +1480,6 @@ function handleProfileIssued(
   );
 }
 
-
-
-
-/*
- * استخراج شناسه شناسنامه و Forecast متناظر از پاسخ
- * مستقیم، items یا Wrapperهای data/Data.
- */
 function extractIssuedProfileReferences(
   value: unknown
 ): IssuedProfileReference[] {

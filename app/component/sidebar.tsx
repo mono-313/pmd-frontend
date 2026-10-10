@@ -145,11 +145,9 @@ export default function Sidebar() {
           item.children?.some(
             (child) =>
               Boolean(
+                !child.disabled &&
                 child.href &&
-                isPathMatch(
-                  pathname,
-                  child.href
-                )
+                child.href === activeHref
               )
           )
       );
@@ -167,7 +165,7 @@ export default function Sidebar() {
       })
     );
   }, [
-    pathname,
+    activeHref,
     visibleNavigationItems,
   ]);
 

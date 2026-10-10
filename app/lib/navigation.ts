@@ -93,13 +93,6 @@ export const NAVIGATION_ITEMS:
           PERMISSIONS.PROFILE_REVIEW_LIST,
       },
 
-      /*
-       * هنوز صفحه و Endpoint مستقل برای
-       * «شناسنامه‌های تأییدشده» نساخته‌ایم.
-       *
-       * بعد از پیاده‌سازی صفحه، disabled را
-       * حذف و href را اضافه می‌کنیم.
-       */
       {
         title: "شناسنامه‌های تأییدشده",
         href:
@@ -113,7 +106,32 @@ export const NAVIGATION_ITEMS:
 
   {
     title: "گزارشات",
-    href: "/about",
+    children: [
+      {
+        title: "گزارش پیش‌بینی‌ها",
+        href: "/reports/forecasts",
+        permission: PERMISSIONS.FORECAST_VIEW,
+        // پس از ساخت صفحه، disabled را حذف کنید.
+        disabled: true,
+      },
+      {
+        title: "گزارش شناسنامه‌ها",
+        href: "/reports/program-profiles",
+        permission: PERMISSIONS.PROFILE_VIEW,
+        disabled: true,
+      },
+      {
+        title: "گزارش موضوعی شناسنامه",
+        href: "/reports/topics",
+        permission: PERMISSIONS.PROFILE_VIEW,
+      },
+      {
+        title: "گزارش عوامل شناسنامه",
+        href: "/reports/crew",
+        permission: PERMISSIONS.PROFILE_VIEW,
+        disabled: true,
+      },
+    ],
   },
 
   {
