@@ -449,7 +449,16 @@ export default function ProgramProfileReviewInboxPage() {
                                 )}`
                               )
                             }
-                            className="inline-flex items-center gap-2 rounded-lg border border-[#007fcf] px-3 py-2 font-semibold text-[#007fcf] transition hover:bg-[#007fcf] hover:text-white"
+                            className="
+                            inline-flex 
+                            items-center gap-2 
+                            rounded-lg border 
+                            border-[#007fcf] 
+                            px-3 py-2 font-semibold
+                             text-[#007fcf] 
+                             transition
+                              hover:bg-[#007fcf] 
+                              hover:text-white"
                           >
                             <Eye size={17} />
                             مشاهده و بررسی

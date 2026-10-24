@@ -702,11 +702,11 @@ export default function ForecastReviewPage() {
                               items-center
                               justify-center
                               gap-2
-                              rounded-lg
-                              bg-[#007fcf]
+                              rounded-lg border
+                             border-[#007fcf]
                               px-4 py-2
                               font-semibold
-                              text-white
+                              text-[#007fcf]
                               shadow-sm
                               transition
                               hover:bg-[#006daf]

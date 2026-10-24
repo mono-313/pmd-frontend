@@ -75,9 +75,12 @@ export default function Header() {
         return;
       }
 
-      if (!parsedUser || typeof parsedUser.userName !== "string" ||
-          !Array.isArray(parsedUser.roles) || !parsedUser.roles.every(role => typeof role === "string") ||
-          !Array.isArray(parsedUser.networkIds)) throw new Error("Invalid session");
+      if (!parsedUser || 
+        typeof parsedUser.userName !== "string" ||
+          !Array.isArray(parsedUser.roles) || 
+          !parsedUser.roles.every(role => typeof role === "string") ||
+          !Array.isArray(parsedUser.networkIds))
+          throw new Error("Invalid session");
       setUserInfo(parsedUser);
     } catch (error) {
       console.error(
@@ -304,9 +307,7 @@ export default function Header() {
                   </p>
 
                   <p className="font-semibold mt-1">
-                    {userInfo.networkIds.length > 0
-                      ? userInfo.networkIds.join("، ")
-                      : "تخصیص داده نشده"}
+                    <ProfileAssignmentName user={userInfo} kind="network" />
                   </p>
                 </div>
               </div>
@@ -335,8 +336,7 @@ export default function Header() {
                   </p>
 
                   <p className="font-semibold mt-1">
-                    {userInfo.networkGroupId ??
-                      "تخصیص داده نشده"}
+                    <ProfileAssignmentName user={userInfo} kind="group" />
                   </p>
                 </div>
               </div>
@@ -434,10 +434,12 @@ function getRoleTitle(
   return roleTitles[role] ?? role;
 }
 
-/* اعلان‌های کارتابل: دسترسی نهایی همیشه با Backend و توکن است. */
+
 type InboxRow = Record<string, unknown> & { id: string };
 type InboxNotice = 
-{ key: string; title: string; label: string; 
+{ key: string; title: string; label: string;
+  mainTopic: string; broadcastDate: string;
+  planId: number | null; networkId: number | null; 
   href: string | null };
 const ROLE_TITLES: Record<string, string> = {
   Admin: "مدیر سامانه", NetworkManager: "مدیر شبکه",
@@ -470,18 +472,23 @@ function profileStage(value: unknown): number | null {
   ? number : null;
 }
 function productionKind(row: InboxRow): 10 | 20 | null {
-  // هماهنگ با کارتابل فعلی: productionMethod اولویت دارد؛ عدد صفر ضبطی نیست.
-  const method = typeof row.productionMethod === "string"
-    ? row.productionMethod.trim().replace(/ي/g, "ی").replace(/ك/g, "ک") : "";
+    const method = typeof row.productionMethod === "string"
+    ? row.productionMethod.trim().
+    replace(/ي/g, "ی").
+    replace(/ك/g, "ک") : "";
+
   if (method === "زنده") return 10;
-  if (["ضبطی", "تولیدی", "ضبطی (تولیدی)"].includes(method)) return 20;
+  if (["ضبطی", "تولیدی", "ضبطی (تولیدی)"].includes(method))
+     return 20;
   const value = Number(row.programType);
-  return value === 10 || value === 20 ? value : null;
+  return value === 10 ||
+   value === 20 ? 
+   value : null;
 }
 
 function ownRecord(row: InboxRow, user: UserSession): 
 boolean {
-  // نام کاربری طبق قرارداد ورود یکتا است؛ صرف داشتن نقش Providers مالکیت نیست.
+  
   const name = row.createdByUserName ?? row.userCreatorName;
   return typeof name === "string" && 
   name.trim().toLowerCase() === user.userName.trim().toLowerCase();
@@ -514,9 +521,10 @@ function makeNotice
 ) {
   return {
     key: `forecast:${row.id}`,
-    title: String(row.mainTopic || "پیش‌بینی تأییدشده"),
+    ...noticeDetails(row),
     label: "پیش‌بینی شما تأیید شد",
-    href: `/approved-forecasts?forecastId=${encodeURIComponent(row.id)}`,
+    href: `/approved-forecasts?forecastId=$
+      {encodeURIComponent(row.id)}`,
   };
 }
       
@@ -557,11 +565,10 @@ function makeNotice
   if (!label) return null;
   return {
     key: `${kind}:${row.id}`, label,
-    title: typeof row.mainTopic === "string" 
-    && row.mainTopic.trim() ? 
-    row.mainTopic : "بدون عنوان موضوع",
-    // مسیر ویرایش تهیه‌کننده در فایل‌های ارسالی موجود نیست؛ مسیر حدسی نمی‌سازیم.
-    href: returned ? null : `${kind === "forecast" ? "/forecasts" : "/program-profiles"}/review/${encodeURIComponent(row.id)}`,
+    ...noticeDetails(row),
+     href: returned ? null : 
+     `${kind === "forecast" ? "/forecasts" :
+       "/program-profiles"}/review/${encodeURIComponent(row.id)}`,
   };
 }
 
@@ -569,8 +576,6 @@ async function readInboxPages
 (path: string, signal: AbortSignal): 
 Promise<InboxRow[]> {
   const rows = new Map<string, InboxRow>();
-  // Routeهای فعلی در نبود Pagination، totalPages=1 می‌سازند.
-  // تا صفحهٔ خالی پیش می‌رویم؛ به این عددِ جایگزین برای توقف اعتماد نمی‌کنیم.
   for (let page = 1; page <= 200; page += 1) {
     const url = new URL(path, window.location.origin);
     url.searchParams.set("pageNumber", String(page));
@@ -636,11 +641,17 @@ function InboxNotifications
     ["admin", "networkgroupmanager", "providers"].includes(role));
   const canProfile = 
   roleKey.split(",").some(role => 
-    ["admin", "networkgroupmanager", "providers", "supervisor", "livesupervisor", "broadcastmanager", "planmanager"].includes(role));
+    ["admin", "networkgroupmanager",
+       "providers", "supervisor", "livesupervisor", 
+       "broadcastmanager", "planmanager"].includes(role));
 
   useEffect(() => {
-    const dismiss = (event: MouseEvent) => { if (!panel.current?.contains(event.target as Node)) setOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
+    const dismiss = (event: MouseEvent) => 
+      { if (!panel.current?.contains(event.target as Node)) 
+        setOpen(false); };
+    const escape = (event: KeyboardEvent) => 
+      { if (event.key === "Escape") 
+        setOpen(false); };
     document.addEventListener("mousedown", dismiss); 
     document.addEventListener("keydown", escape);
     return () => 
@@ -700,7 +711,6 @@ const profileRows =
     ? profileResult.value
     : null;
 
-// برای تشخیص «شناسنامه ندارد»، فهرست باید کامل و معتبر باشد.
 const canCheckIssuedProfiles =
   profileRows !== null &&
   profileRows.every(
@@ -729,8 +739,6 @@ if (profileRows !== null && !canCheckIssuedProfiles) {
     ["Approved", "3"].includes(String(row.status));
 
   if (isApprovedForecast) {
-    // اگر شناسنامه‌ها دریافت نشده‌اند، نمی‌توانیم
-    // با اطمینان بگوییم این پیش‌بینی شناسنامه ندارد.
     if (!canCheckIssuedProfiles) return;
 
     const alreadyIssued = issuedForecastIds.has(
@@ -746,18 +754,23 @@ if (profileRows !== null && !canCheckIssuedProfiles) {
 });
             if (source.kind === "profile"
               && roleKey.split(",").some(
-                role => ["supervisor", "livesupervisor"].includes(role)) &&
+                role => ["supervisor", "livesupervisor"]
+                .includes(role)) &&
                 result.value.some(
                   row => profileStage(row.status) === 20 
                   && productionKind(row) === null)) {
-              failures.push("نوع تولید بعضی شناسنامه‌های منتظر ناظر مشخص نیست؛ شمارش نیازمند بررسی است.");
+              failures.push
+              ("نوع تولید بعضی شناسنامه‌های منتظر ناظر مشخص نیست؛ شمارش نیازمند بررسی است.");
             }
-          } else failures.push(`${source.title}: ${controller.signal.aborted 
+          } else failures.push(`${source.title}: 
+            ${controller.signal.aborted 
             ? "زمان دریافت به پایان رسید." : 
             result.reason instanceof Error ? 
             result.reason.message : "دریافت ناموفق بود."}`);
         });
-        setNotices(next);
+        const namedNotices = await resolveNoticePrograms(next, controller.signal);
+        if (disposed) return;
+        setNotices(namedNotices);
         setErrors(failures); 
         setLoaded(true);
       }
@@ -908,23 +921,13 @@ if (profileRows !== null && !canCheckIssuedProfiles) {
             className="block text-xs text-blue-700">
               {notice.label}
               </span>
-              <span 
-              className="mt-1 block
-                         break-words 
-                         text-sm 
-                         font-semibold">
-                          {notice.title}
-                          </span>
+              <NoticeDetails notice={notice} />
           </button> : 
           <div className="p-4">
             <p className="text-xs text-amber-700">
               {notice.label}
               </p>
-              <p className="mt-1 break-words
-                            text-sm
-                            font-semibold">
-                              {notice.title}
-              </p>
+              <NoticeDetails notice={notice} />
               <p className="mt-1 text-xs
                            text-gray-500">از فهرست موارد ثبت‌شدهٔ خودتان، اصلاح را انجام دهید.
                            </p>
@@ -943,4 +946,172 @@ if (profileRows !== null && !canCheckIssuedProfiles) {
                        </p>}
     </section>}
   </div>;
+}
+
+
+function noticeText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function noticeId(value: unknown): number | null {
+  const id = typeof value === "number" ? value :
+    typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function noticeDetails(row: InboxRow) {
+  return {
+    title: noticeText(row.planName) || noticeText(row.programName),
+    mainTopic: noticeText(row.mainTopic) || "موضوع ثبت نشده",
+    broadcastDate: noticeText(row.broadcastDate),
+    planId: noticeId(row.planId),
+    networkId: noticeId(row.networkId),
+  };
+}
+
+function noticeBroadcastDate(value: string): string {
+  if (!value) return "ثبت نشده";
+  // Broadcast date is a calendar date; do not shift it by the browser timezone.
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T|$)/.exec(value);
+  if (!match) return "نامشخص";
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T12:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return "نامشخص";
+  return new Intl.DateTimeFormat("fa-IR-u-ca-persian", {
+    year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC",
+  }).format(date);
+}
+
+function noticeProgramRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.filter(objectValue);
+  if (!objectValue(value)) return [];
+  for (const key of ["programs", "Programs", "items", "Items", "data", "Data", "result", "Result"]) {
+    const rows = noticeProgramRows(value[key]);
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+async function resolveNoticePrograms(notices: InboxNotice[], signal: AbortSignal): Promise<InboxNotice[]> {
+  const networkIds = [...new Set(notices.filter(notice => !notice.title && notice.planId !== null)
+    .map(notice => notice.networkId).filter((id): id is number => id !== null))];
+  const names = new Map<string, string>();
+  // Limit parallel requests and request each network only once per refresh.
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(4, networkIds.length) }, async () => {
+    while (cursor < networkIds.length && !signal.aborted) {
+      const networkId = networkIds[cursor++];
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) controller.abort();
+      const timeout = setTimeout(abort, 10000);
+      try {
+        const response = await fetch(`/api/programs?networkId=${networkId}`, {
+          cache: "no-store", credentials: "same-origin",
+          headers: { Accept: "application/json" }, signal: controller.signal,
+        });
+        if (!response.ok) continue;
+        const body: unknown = await response.json();
+        for (const row of noticeProgramRows(body)) {
+          const id = noticeId(row.planId ?? row.PlanId ?? row.id ?? row.Id ?? row.value ?? row.Value);
+          const rowNetwork = noticeId(row.networkId ?? row.NetworkId);
+          if (id === null || (rowNetwork !== null && rowNetwork !== networkId)) continue;
+          const name = [row.name, row.Name, row.planName, row.programName, row.title, row.Title, row.text, row.Text]
+            .map(noticeText).find(Boolean);
+          if (name) names.set(`${networkId}:${id}`, name);
+        }
+      } catch {
+        // A lookup failure must not hide an actionable notification.
+      } finally {
+        clearTimeout(timeout);
+        signal.removeEventListener("abort", abort);
+      }
+    }
+  }));
+  return notices.map(notice => ({
+    ...notice,
+    title: notice.title || names.get(`${notice.networkId}:${notice.planId}`) || "نام برنامه در دسترس نیست",
+  }));
+}
+
+function NoticeDetails({ notice }: { notice: InboxNotice }) {
+  return <span className="mt-1 block min-w-0 max-w-full">
+    <span title={notice.title} className="block truncate text-sm font-semibold leading-6 text-gray-800">
+      {notice.title}
+    </span>
+    <span className="mt-0.5 block text-[11px] leading-5 text-gray-500">
+      تاریخ پخش: {noticeBroadcastDate(notice.broadcastDate)}
+    </span>
+    <span title={notice.mainTopic}
+      className="mt-0.5 block break-words text-xs font-normal leading-5 text-gray-600"
+      style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden", overflowWrap: "anywhere" }}>
+      {notice.mainTopic}
+    </span>
+  </span>;
+}
+
+
+function assignmentRows(value: unknown): Record<string, unknown>[] {
+  if (Array.isArray(value)) return value.filter(objectValue);
+  if (!objectValue(value)) return [];
+  for (const key of ["networks", "Networks", "networkGroups", "NetworkGroups", "items", "Items", "data", "Data", "result", "Result"]) {
+    const rows = assignmentRows(value[key]);
+    if (rows.length) return rows;
+  }
+  return [];
+}
+
+function assignmentName(row: Record<string, unknown>, kind: "network" | "group"): string {
+  const fields = kind === "network"
+    ? [row.networkName, row.NetworkName, row.networkTitle, row.NetworkTitle]
+    : [row.networkGroupName, row.NetworkGroupName, row.networkGroupTitle, row.NetworkGroupTitle, row.groupName, row.GroupName];
+  return [...fields, row.name, row.Name, row.title, row.Title, row.text, row.Text].map(noticeText).find(Boolean) || "";
+}
+
+async function fetchAssignmentRows(path: string, signal: AbortSignal) {
+  const response = await fetch(path, { cache: "no-store", credentials: "same-origin", signal, headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error("دریافت نام انجام نشد");
+  return assignmentRows(await response.json());
+}
+
+function ProfileAssignmentName({ user, kind }: { user: UserSession; kind: "network" | "group" }) {
+  const networkKey = user.networkIds.join(",");
+  const groupId = user.networkGroupId;
+  const [name, setName] = useState("در حال دریافت نام…");
+  useEffect(() => {
+    let disposed = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const networkIds = networkKey.split(",").map(noticeId).filter((id): id is number => id !== null);
+    setName("در حال دریافت نام…");
+    async function load() {
+      if (kind === "group" && groupId === null) return "تخصیص داده نشده";
+      if (!networkIds.length) return kind === "network" ? "تخصیص داده نشده" : "نام گروه در دسترس نیست";
+      if (kind === "network") {
+        const rows = await fetchAssignmentRows("/api/networks", controller.signal);
+        return networkIds.map(id => {
+          const row = rows.find(item => noticeId(item.id ?? item.Id ?? item.networkId ?? item.NetworkId ?? item.value ?? item.Value) === id);
+          return row && assignmentName(row, kind) || "نام شبکه در دسترس نیست";
+        }).join("، ");
+      }
+      const results = await Promise.allSettled(networkIds.map(id =>
+        fetchAssignmentRows(`/api/networkgroups/${id}`, controller.signal).then(rows => ({ networkId: id, rows }))));
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        for (const row of result.value.rows) {
+          const id = noticeId(row.id ?? row.Id ?? row.networkGroupId ?? row.NetworkGroupId ?? row.value ?? row.Value);
+          const networkId = noticeId(row.networkId ?? row.NetworkId);
+          if (id !== groupId || (networkId !== null && networkId !== result.value.networkId)) continue;
+          const title = assignmentName(row, kind);
+          if (title) return title;
+        }
+      }
+      return "نام گروه در دسترس نیست";
+    }
+    void load().then(value => { if (!disposed) setName(value); })
+      .catch(() => { if (!disposed) setName(kind === "network" ? "نام شبکه در دسترس نیست" : "نام گروه در دسترس نیست"); })
+      .finally(() => clearTimeout(timeout));
+    return () => { disposed = true; clearTimeout(timeout); controller.abort(); };
+  }, [networkKey, groupId, kind]);
+  return <span className="block break-words" title={name}>{name}</span>;
 }

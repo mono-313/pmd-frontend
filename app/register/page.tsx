@@ -76,6 +76,18 @@ const ROLE_OPTIONS:
   { value: "Admin", label: "ادمین" },
 ];
 
+const NETWORK_SCOPED_ROLES = new Set<string>([
+  "NetworkManager",
+  "PlanManager",
+  "BroadcastManager",
+  "Supervisor",
+  "LiveSupervisor",
+]);
+
+function skipsNetworkGroup(role: string): boolean {
+  return role === "Admin" || NETWORK_SCOPED_ROLES.has(role);
+}
+
 const registerSchema = z
   .object({
     fullName: z
@@ -114,13 +126,24 @@ const registerSchema = z
       .number()
       .int()
       .positive()
-      .nullable()
-      .refine((value) => value !== null, {
-        message: "انتخاب زیرشبکه الزامی است.",
-      }),
+      .nullable(),
 
     role: z.enum(ROLE_VALUES),
   })
+  .refine(
+    (data) => skipsNetworkGroup(data.role) || data.networkGroupId !== null,
+    {
+      message: "انتخاب زیرشبکه الزامی است.",
+      path: ["networkGroupId"],
+    }
+  )
+  .refine(
+    (data) => !NETWORK_SCOPED_ROLES.has(data.role) || data.networkIds.length > 0,
+    {
+      message: "انتخاب حداقل یک شبکه الزامی است.",
+      path: ["networkIds"],
+    }
+  )
   .refine(
     (data) => data.password === data.confirmPassword,
     {
@@ -131,7 +154,7 @@ const registerSchema = z
 
 /*
  * State فرم قبل از اعتبارسنجی می‌تواند networkGroupId = null داشته باشد.
- * خروجی موفق Schema به‌کمک refine فقط مقدار عددی معتبر خواهد داشت.
+ * ادمین و نقش‌های سطح شبکه گروه ندارند؛ الزام گروه در سایر نقش‌ها حفظ شده است.
  */
 type RegisterFormData = z.input<
   typeof registerSchema
@@ -179,12 +202,16 @@ export default function RegisterPage() {
   const [networkGroups, setNetworkGroups] =
     useState<SelectOption[]>([]);
 
-  const [isLoadingAssignments, setIsLoadingAssignments] =
-    useState(true);
+  const [isLoadingNetworks, setIsLoadingNetworks] = useState(true);
+  const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+  const isLoadingAssignments = isLoadingNetworks || isLoadingGroups;
 
   const [assignmentsError, setAssignmentsError] =
     useState("");
 
+
+  const isAdmin = formData.role === "Admin";
+  const hasNoGroup = skipsNetworkGroup(formData.role);
 
   const visibleNetworkGroups =
     useMemo(() => {
@@ -216,7 +243,7 @@ export default function RegisterPage() {
 
     async function loadNetworks() {
       try {
-        setIsLoadingAssignments(true);
+        setIsLoadingNetworks(true);
         setAssignmentsError("");
 
         const networkOptions =
@@ -248,7 +275,7 @@ export default function RegisterPage() {
         );
       } finally {
         if (!controller.signal.aborted) {
-          setIsLoadingAssignments(false);
+          setIsLoadingNetworks(false);
         }
       }
     }
@@ -260,8 +287,9 @@ export default function RegisterPage() {
 
 
   useEffect(() => {
-    if (formData.networkIds.length === 0) {
+    if (hasNoGroup || formData.networkIds.length === 0) {
       setNetworkGroups([]);
+      setIsLoadingGroups(false);
       return;
     }
 
@@ -270,7 +298,7 @@ export default function RegisterPage() {
 
     async function loadNetworkGroups() {
       try {
-        setIsLoadingAssignments(true);
+        setIsLoadingGroups(true);
         setAssignmentsError("");
 
         const groupsByNetwork =
@@ -321,7 +349,7 @@ export default function RegisterPage() {
         );
       } finally {
         if (!controller.signal.aborted) {
-          setIsLoadingAssignments(false);
+          setIsLoadingGroups(false);
         }
       }
     }
@@ -329,7 +357,7 @@ export default function RegisterPage() {
     void loadNetworkGroups();
 
     return () => controller.abort();
-  }, [formData.networkIds]);
+  }, [formData.networkIds, hasNoGroup]);
 
   function handleInputChange(
     event: ChangeEvent<HTMLInputElement>
@@ -401,11 +429,18 @@ export default function RegisterPage() {
     setFormData((previous) => ({
       ...previous,
       role: event.target.value as RoleValue,
+      ...(event.target.value === "Admin"
+        ? { networkIds: [], networkGroupId: null }
+        : skipsNetworkGroup(event.target.value)
+          ? { networkGroupId: null }
+          : {}),
     }));
 
     setFieldErrors((previous) => ({
       ...previous,
       role: undefined,
+      networkIds: undefined,
+      networkGroupId: undefined,
     }));
     setServerError("");
   }
@@ -414,6 +449,7 @@ export default function RegisterPage() {
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
+    if (isSubmitting) return;
 
     setFieldErrors({});
     setServerError("");
@@ -453,26 +489,36 @@ export default function RegisterPage() {
             email: validationResult.data.email,
             password: validationResult.data.password,
             roles: [validationResult.data.role],
-            networkIds:
-              validationResult.data.networkIds,
-            networkGroupId:
-              validationResult.data.networkGroupId,
+            ...(validationResult.data.role === "Admin"
+              ? { networkIds: [] }
+              : {
+                  networkIds: validationResult.data.networkIds,
+                  networkGroupId: skipsNetworkGroup(validationResult.data.role)
+                    ? null
+                    : validationResult.data.networkGroupId,
+                }),
           }),
         }
       );
 
-      const responseData = await response.json();
+      const responseData = parseJsonResponse(await response.text());
 
       if (!response.ok) {
         setServerError(
-          responseData.message ||
+          getApiErrorMessage(responseData) ??
             "ثبت‌نام انجام نشد."
         );
         return;
       }
 
+      if (!isRecord(responseData) || !Array.isArray(responseData.roles) ||
+          !responseData.roles.every((role) => typeof role === "string")) {
+        setServerError("پاسخ ثبت‌نام ساختار نشست معتبر ندارد؛ حساب را از صفحه ورود بررسی کنید.");
+        return;
+      }
+
       const safeSession =
-        responseData as SafeUserSession;
+        responseData as unknown as SafeUserSession;
 
       saveUserSession(safeSession);
 
@@ -600,6 +646,20 @@ export default function RegisterPage() {
             />
           </div>
 
+          <SelectField
+            id="role"
+            label="نقش"
+            value={formData.role}
+            options={ROLE_OPTIONS}
+            error={fieldErrors.role}
+            onChange={handleRoleChange}
+          />
+
+          {isAdmin ? (
+            <p role="status">
+              ادمین به شبکه یا زیرشبکه مشخصی محدود نیست؛ انتخاب شبکه و گروه لازم نیست.
+            </p>
+          ) : (
           <div className={styles.twoColumns}>
             <MultiSelectField
               label="شبکه‌ها"
@@ -610,7 +670,7 @@ export default function RegisterPage() {
               onToggle={handleNetworkToggle}
             />
 
-            <SelectField
+            {!hasNoGroup && <SelectField
               id="networkGroupId"
               label="زیرشبکه / گروه شبکه"
               value={formData.networkGroupId}
@@ -620,19 +680,12 @@ export default function RegisterPage() {
               required
               disabled={isLoadingAssignments}
               onChange={handleNetworkGroupChange}
-            />
+            />}
           </div>
 
-          <SelectField
-            id="role"
-            label="نقش"
-            value={formData.role}
-            options={ROLE_OPTIONS}
-            error={fieldErrors.role}
-            onChange={handleRoleChange}
-          />
+          )}
 
-          {assignmentsError && (
+          {!isAdmin && assignmentsError && (
             <div
               className={styles.serverError}
               role="alert"

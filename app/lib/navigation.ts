@@ -111,8 +111,7 @@ export const NAVIGATION_ITEMS:
         title: "گزارش پیش‌بینی‌ها",
         href: "/reports/forecasts",
         permission: PERMISSIONS.FORECAST_VIEW,
-        // پس از ساخت صفحه، disabled را حذف کنید.
-        disabled: true,
+          
       },
       {
         title: "گزارش شناسنامه‌ها",

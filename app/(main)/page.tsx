@@ -3,7 +3,14 @@
 "use client"
 import { HomeGrid } from '../component/HomeGrid';
 import type { HomeBoxData } from '../component/HomeGrid/Types';
-import { Mail, Eye, TrendingUpDown, CalendarCheck, RefreshCcw, CircleCheckBig } 
+import { 
+  Mail,
+   Eye, 
+  TrendingUpDown,
+  CalendarCheck,
+  RefreshCcw, 
+  CircleCheckBig,
+  LayoutDashboard } 
  from 'lucide-react';
 import {
   useEffect,
@@ -181,11 +188,38 @@ export default function HomePage() {
 
 
   return (
-    <main className=" bg-gray-50 flex flex-col items-center justify-center p-6">
-      {/* <h1 className="text-3xl font-bold mb-8 text-gray-800">
-       به سامانه موج پلاس خوش آمدید
-      </h1> */}
-      <HomeGrid boxes={boxes} />
+    <main className=" bg-gray-50
+     flex flex-col p-6
+     rounded 
+    
+    ">
+      <div className="flex item-center-justify-start gap-3 mb-2">
+      <LayoutDashboard size={24}
+        strokeWidth={1.8}
+        className="text-gray-800 shrink-0 mb-4"
+        />
+      <h1 className="text-3xl font-bold mb-4 
+      text-gray-800 justify-right items-right">
+         داشبورد مدیریت
+      </h1>
+      </div>
+      <h2 className="mb-8 
+      text-gray-800 mr-10 ">
+        نمای کلی فرایندها و دسترسی سریع به بخش‌های سامانه
+      </h2>
+
+      {/* <div className='bg-blue-200 mb-2'>
+        <h3> وضعیت فرایندها</h3>
+
+      </div> */}
+
+      <div
+      //  className='bg-blue-200'
+       >
+        {/* <h3> دسترسی سریع</h3> */}
+        <HomeGrid boxes={boxes} />
+      </div>
+      
     </main>
     );
   }

@@ -339,7 +339,15 @@ export default function ProgramProfileDetailsPage() {
         dir="rtl"
       >
         <div
-          className="mx-auto flex min-h-72 max-w-6xl items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-white text-gray-600 shadow-sm"
+          className="mx-auto
+           flex min-h-72 
+           max-w-6xl 
+           items-center 
+           justify-center 
+           gap-3 rounded-2xl
+            border border-gray-200 
+            bg-white text-gray-600
+             shadow-sm"
         >
           <LoaderCircle
             size={25}
@@ -1406,7 +1414,7 @@ function getWorkflowAccess(
           canApprove: isAdmin,
           canReturn: false,
           message:
-            "نوع برنامه معتبر نیست؛ programType باید برای برنامه زنده ۱۰ و برای برنامه ضبطی ۲۰ باشد.",
+"نوع برنامه معتبر نیست. ",
         };
       }
       break;

@@ -410,7 +410,8 @@ export default function ForecastViewPage() {
             mx-auto
             max-w-3xl
             rounded-2xl
-            border border-red-200
+            border 
+            border-red-200
             bg-red-50
             p-6
             text-red-700

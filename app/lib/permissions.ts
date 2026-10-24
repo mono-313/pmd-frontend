@@ -157,6 +157,8 @@ export const ROLE_PERMISSIONS:
 export function normalizeRole(
   role: string
 ): AppRole | null {
+  if (typeof role !== "string") return null;
+
   const normalizedRole =
     role
       .trim()
@@ -206,8 +208,9 @@ export function normalizeRole(
   };
 
   return (
-    roleMap[normalizedRole] ??
-    null
+    Object.prototype.hasOwnProperty.call(roleMap, normalizedRole)
+      ? roleMap[normalizedRole]
+      : null
   );
 }
 
@@ -224,7 +227,7 @@ export function hasPermission(
   permission:
     Permission
 ): boolean {
-  if (!roles?.length) {
+  if (!Array.isArray(roles) || !roles.length) {
     return false;
   }
 

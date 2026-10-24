@@ -214,9 +214,22 @@ export default function CreateExpertDialog({
     if (!/^09\d{9}$/.test(mobilePhone)) {
       return setError("شماره تلفن همراه باید ۱۱ رقم و با 09 شروع شود.");
     }
-    if (nationalCode && !isValidIranianNationalCode(nationalCode)) {
-      return setError("کد ملی واردشده معتبر نیست.");
-    }
+    if (nationalCode) {
+  if (!/^\d{10}$/.test(nationalCode)) {
+    return setError(
+      `کد ملی باید دقیقاً ۱۰ رقم باشد. طول فعلی: ${nationalCode.length}؛ ` +
+      `کاراکتر غیرعددی: ${/[^0-9]/.test(nationalCode) ? "دارد" : "ندارد"}`
+    );
+  }
+
+  if (/^(\d)\1{9}$/.test(nationalCode)) {
+    return setError("تمام رقم‌های کد ملی نمی‌توانند یکسان باشند.");
+  }
+
+  if (!isValidIranianNationalCode(nationalCode)) {
+    return setError("کد ملی صحیح وارد نشده است");
+  }
+}
     if (formData.networkIds.length === 0) {
       return setError("حداقل یک شبکه را انتخاب کنید.");
     }
@@ -391,9 +404,7 @@ export default function CreateExpertDialog({
                 placeholder="1234567890"
                 className={inputClass}
               />
-              <p className="mt-1.5 text-xs text-gray-500">
-                اختیاری؛ در صورت ورود باید معتبر باشد.
-              </p>
+              
             </Field>
             <Field label="تلفن محل کار">
               <input

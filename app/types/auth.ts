@@ -1,8 +1,5 @@
-export interface LoginRequest {
-  userName: string;
-  password: string;
-}
-
+export interface LoginRequest
+{ userName: string; password: string; }
 export interface LoginApiResponse {
   accessToken: string;
   refreshToken: string;
@@ -11,7 +8,6 @@ export interface LoginApiResponse {
   networkIds: number[];
   networkGroupId: number | null;
 }
-
 export interface SafeUserSession {
   userName: string;
   expiresAt: string;
@@ -19,7 +15,6 @@ export interface SafeUserSession {
   networkIds: number[];
   networkGroupId: number | null;
 }
-
 export interface ApiErrorResponse {
   type?: string;
   title?: string;
@@ -28,11 +23,8 @@ export interface ApiErrorResponse {
   code?: string;
   description?: string;
 }
-
-//register
-
 export interface RegisterRequest {
-  fullName: string;
+  fullName: string;   
   userName: string;
   email: string;
   password: string;
@@ -40,31 +32,4 @@ export interface RegisterRequest {
   networkIds: number[];
   networkGroupId: number | null;
 }
-
-export interface RegisterApiResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: string;
-  roles: string[];
-  networkIds: number[];
-  networkGroupId: number | null;
-}
-
-export interface SafeUserSession {
-  userName: string;
-  expiresAt: string;
-  roles: string[];
-  networkIds: number[];
-  networkGroupId: number | null;
-}
-
-export interface ApiErrorResponse {
-  type?: string;
-  title?: string;
-  statusCode?: number;
-  errors?: string;
-  code?: string;
-  description?: string;
-}
-
-
+export interface RegisterApiResponse extends LoginApiResponse {}

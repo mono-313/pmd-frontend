@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { normalizeTokens, saveTokens } from "@/app/lib/auth-server";
+export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 
 import {
@@ -25,6 +26,14 @@ const ALLOWED_ROLES = new Set([
   "Admin",
 ]);
 
+
+const NETWORK_SCOPED_ROLES = new Set<string>([
+  "NetworkManager",
+  "PlanManager",
+  "BroadcastManager",
+  "Supervisor",
+  "LiveSupervisor",
+]);
 
 export async function POST(
   request: Request
@@ -323,12 +332,19 @@ function validateRegisterRequest(
     };
   }
 
-  const networkGroupId =
-    readNullablePositiveInteger(
-      value.networkGroupId
-    );
+  const isNetworkScoped = roles.some((role) => NETWORK_SCOPED_ROLES.has(role));
+  const isAdmin = roles.includes("Admin");
+  if (isNetworkScoped && !isAdmin && networkIds.length === 0) {
+    return { success: false, message: "انتخاب حداقل یک شبکه الزامی است." };
+  }
+
+  // Network-scoped roles must never retain a previously selected group.
+  const networkGroupId = isNetworkScoped
+    ? null
+    : readNullablePositiveInteger(value.networkGroupId);
 
   if (
+    !isNetworkScoped &&
     value.networkGroupId != null &&
     networkGroupId === null
   ) {
@@ -381,34 +397,10 @@ async function readBackendResponse(
 
 
 async function setAuthenticationCookies(
-  request: Request,
+  _request: Request,
   response: RegisterApiResponse
 ) {
-  const cookieStore =
-    await cookies();
-  const isHttpsRequest =
-    new URL(request.url).protocol ===
-    "https:";
-
-  cookieStore.set({
-    name: "access-token",
-    value: response.accessToken,
-    httpOnly: true,
-    secure: isHttpsRequest,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 15 * 60,
-  });
-
-  cookieStore.set({
-    name: "refresh-token",
-    value: response.refreshToken,
-    httpOnly: true,
-    secure: isHttpsRequest,
-    sameSite: "strict",
-    path: "/api/auth",
-    maxAge: 7 * 24 * 60 * 60,
-  });
+  await saveTokens(normalizeTokens(response));
 }
 
 
@@ -579,7 +571,6 @@ function getFirstStringField(
 
   return null;
 }
-
 
 function isRecord(
   value: unknown

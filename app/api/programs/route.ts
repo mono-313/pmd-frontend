@@ -49,18 +49,7 @@ interface BaseInfoResponse {
 }
 
 
-/*
- * GET /api/programs
- *
- * مراحل:
- * ۱. دریافت کاربر از PMD
- * ۲. استخراج شبکه‌های مجاز
- * ۳. دریافت برنامه‌های هر شبکه
- * ۴. حذف موارد تکراری
- * ۵. مرتب‌سازی فارسی
- */
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const cookieStore =
       await cookies();
@@ -90,10 +79,6 @@ export async function GET() {
     }
 
 
-    /*
-     * اطلاعات کاربر از Token دریافت می‌شود؛
-     * بنابراین networkIds از مرورگر قابل جعل نیست.
-     */
     const currentUserUrl =
       `${API_CONFIG.baseUrl}` +
       `${API_ENDPOINTS.auth.currentUser}`;
@@ -146,13 +131,6 @@ export async function GET() {
     }
 
 
-    /*
- * پاسخ /auth/me فقط برای اطمینان
- * از معتبر بودن Token بررسی می‌شود.
- *//*
- * پاسخ /auth/me فقط برای بررسی
- * معتبر بودن Access Token است.
- */
 if (!isRecord(currentUserData)) {
   console.error(
     "Invalid current user response:",
@@ -165,52 +143,49 @@ if (!isRecord(currentUserData)) {
   );
 }
 
-/*
- * استخراج شبکه‌ها و گروه کاربر
- * از Claimهای Access Token
- */
-const assignments:
-  UserAssignments | null =
-  getUserAssignmentsFromToken(
-    accessToken
-  );
+const isAdmin =
+  Array.isArray(currentUserData.roles) &&
+  currentUserData.roles.some((role) => role === "Admin");
 
-if (!assignments) {
+const assignments = getUserAssignmentsFromToken(accessToken);
+const requestedNetwork = new URL(request.url).searchParams.get("networkId");
+let selectedNetworkId: number | null = null;
+
+if (requestedNetwork !== null) {
+  const normalizedNetwork = normalizeDigits(requestedNetwork.trim());
+  if (!/^[0-9]+$/.test(normalizedNetwork) ||
+      !Number.isSafeInteger(Number(normalizedNetwork)) ||
+      Number(normalizedNetwork) <= 0) {
+    return jsonError("شناسه شبکه معتبر نیست.", 400);
+  }
+  selectedNetworkId = Number(normalizedNetwork);
+}
+
+if (!isAdmin && !assignments) {
+  return jsonError("اطلاعات شبکه کاربر از توکن قابل استخراج نیست.", 403);
+}
+
+const assignedNetworks = [...new Set(assignments?.networkIds ?? [])];
+if (!isAdmin && selectedNetworkId !== null &&
+    !assignedNetworks.includes(selectedNetworkId)) {
+  return jsonError("دسترسی به برنامه‌های این شبکه مجاز نیست.", 403);
+}
+
+const networkIds = selectedNetworkId !== null
+  ? [selectedNetworkId]
+  : assignedNetworks;
+
+if (!networkIds.length) {
   return jsonError(
-    "اطلاعات شبکه کاربر از توکن قابل استخراج نیست.",
-    403
+    isAdmin
+      ? "برای دریافت نام برنامه، networkId شناسنامه یا پیش‌بینی را ارسال کنید."
+      : "هیچ شبکه‌ای برای این کاربر تعریف نشده است.",
+    isAdmin ? 400 : 403
   );
 }
 
-/*
- * استخراج و پاک‌سازی شناسه شبکه‌ها
- */
-const networkIds:
-  number[] = [
-  ...new Set(
-    assignments.networkIds.filter(
-      (networkId) =>
-        Number.isInteger(
-          networkId
-        ) &&
-        networkId > 0
-    )
-  ),
-];
-
-if (networkIds.length === 0) {
-  return jsonError(
-    "هیچ شبکه‌ای برای این کاربر تعریف نشده است.",
-    403
-  );
-}
-
-/*
- * گروه برنامه‌ساز اختیاری است.
- */
-const networkGroupId:
-  number | null =
-  assignments.networkGroupId;
+// ادمین به گروه حساب خودش محدود نیست؛ فیلتر گروه سایر کاربران حفظ می‌شود.
+const networkGroupId = isAdmin ? null : assignments?.networkGroupId ?? null;
 
 /*
  * دریافت برنامه‌های شبکه‌های کاربر
@@ -309,15 +284,6 @@ const programGroups:
 }
 
 
-/*
- * دریافت برنامه‌های یک شبکه
- */
-/*
- * دریافت برنامه‌های یک شبکه
- *
- * networkId اجباری است.
- * networkGroupId اختیاری است.
- */
 async function loadNetworkPrograms(
   networkId: number,
   networkGroupId:
@@ -341,10 +307,6 @@ async function loadNetworkPrograms(
     String(networkId)
   );
 
-  /*
-   * networkGroupId فقط در صورت وجود
-   * مقدار معتبر ارسال می‌شود.
-   */
   if (
     typeof networkGroupId ===
       "number" &&
@@ -714,13 +676,6 @@ console.log(
 }
 
 
-/*
- * Decode کردن Payload توکن JWT
- *
- * این تابع امضای Token را بررسی نمی‌کند؛
- * اعتبار Token قبل از این مرحله با
- * فراخوانی /auth/me بررسی شده است.
- */
 function decodeJwtPayload(
   accessToken: string
 ): Record<string, unknown> | null {
@@ -794,17 +749,6 @@ function decodeJwtPayload(
   }
 }
 
-
-/*
- * Claim ممکن است:
- *
- * عدد
- * رشته
- * آرایه عدد
- * آرایه رشته
- *
- * باشد.
- */
 function readNumericClaimValues(
   value: unknown
 ): number[] {
