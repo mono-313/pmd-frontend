@@ -633,7 +633,7 @@ export default function ProfileCrewStep({
                     font-bold
                   "
                 >
-                  تخصص عامل
+                 فعالیت
                 </th>
 
                 <th
@@ -1047,7 +1047,7 @@ export default function ProfileCrewStep({
                     text-gray-500
                   "
                 >
-                  نام پرسنل و تخصص عامل انتخاب‌شده را اصلاح کنید.
+                  نام پرسنل انتخاب‌شده را اصلاح کنید.
                 </p>
               </div>
 
@@ -1119,6 +1119,7 @@ export default function ProfileCrewStep({
                     isOptionsLoading
                   }
                   className="
+                  
                     w-full
                     rounded-lg
                     border
@@ -1156,7 +1157,7 @@ export default function ProfileCrewStep({
 
 
               {/* انتخاب تخصص عامل */}
-              <label className="block">
+              {/* <label className="block">
                 <span
                   className="
                     mb-2
@@ -1227,7 +1228,7 @@ export default function ProfileCrewStep({
                     )
                   )}
                 </select>
-              </label>
+              </label> */}
             </div>
 
 

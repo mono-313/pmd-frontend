@@ -1027,17 +1027,9 @@ export default function ExpertsStep({
                             text-gray-800
                           `}
                         >
-                          {expert.firstName}
+                          {expert.firstName} {expert.lastName}
                         </td>
-                        <td
-                          className={`
-                            ${tableCellClass}
-                            font-semibold
-                            text-gray-800
-                          `}
-                        >
-                          {expert.lastName}
-                        </td>
+                        
 
                         <td className={tableCellClass}>
                           {expert.specialty}

@@ -433,7 +433,7 @@ async function handleFinalSubmit() {
               text-gray-800
             "
           >
-            بازبینی و تأیید نهایی
+        بازنگری نهایی
           </h2>
 
           <p
@@ -714,17 +714,9 @@ async function handleFinalSubmit() {
                             text-gray-800
                           `}
                         >
-                          {expert.firstName}
+                          {expert.firstName} {expert.lastName}
                         </td>
-                        <td
-                          className={`
-                            ${tableCellClass}
-                            font-semibold
-                            text-gray-800
-                          `}
-                        >
-                          {expert.lastName}
-                        </td>
+                        
 
                         <td className={tableCellClass}>
                           {expert.specialty}
@@ -806,7 +798,7 @@ async function handleFinalSubmit() {
           >
             <CheckSquare size={19} />
 
-            تأیید نهایی و ارسال
+           صدور پیش‌بینی
           </button>
         </footer>
       </section>
@@ -860,7 +852,7 @@ async function handleFinalSubmit() {
                 text-gray-800
               "
             >
-              تأیید ثبت نهایی
+             ثبت نهایی
             </h3>
 
             <p
@@ -872,7 +864,7 @@ async function handleFinalSubmit() {
                 leading-7
               "
             >
-              آیا از ثبت و ارسال اطلاعات برنامه اطمینان دارید؟
+              آیا از ثبت  اطلاعات این پیش بینی اطمینان دارید؟
             </p>
 {/* 
             <p
@@ -915,7 +907,7 @@ async function handleFinalSubmit() {
               >
                 <XCircle size={18} />
 
-                خیر، بازگشت
+               انصراف
               </button>
 
               {/* انتخاب بله */}
@@ -953,7 +945,7 @@ async function handleFinalSubmit() {
                       size={19}
                     />
 
-                    بله، ثبت شود
+                   ثبت
                   </>
                 )}
               </button>
