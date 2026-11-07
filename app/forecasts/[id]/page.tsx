@@ -246,6 +246,7 @@ export default function ForecastViewPage() {
             forecastData,
             forecastId
           );
+          
 
 
         if (!normalizedForecast) {
@@ -268,6 +269,11 @@ export default function ForecastViewPage() {
         setForecast(
           normalizedForecast
         );
+
+            console.log(
+      "FORECAST PLAN ID:",
+      normalizedForecast.planId
+    );
 
 
         /*
@@ -949,51 +955,58 @@ async function loadProgramName(
   }
 
   try {
-    const response =
-      await fetch(
-        "/api/programs",
-        {
-          method:
-            "GET",
-
-          headers: {
-            Accept:
-              "application/json",
-          },
-
-          cache:
-            "no-store",
-        }
-      );
+    const response = await fetch(
+      "/api/programs",
+      {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      }
+    );
 
     const responseData =
-      await readJsonResponse(
-        response
+      await readJsonResponse(response);
+
+    if (!response.ok) {
+      console.error(
+        "Programs API error:",
+        responseData
       );
 
+      return "";
+    }
+
     if (
-      !response.ok ||
       !isRecord(responseData) ||
-      !Array.isArray(
-        responseData.programs
-      )
+      !Array.isArray(responseData.programs)
     ) {
+      console.error(
+        "Invalid programs response:",
+        responseData
+      );
+
       return "";
     }
 
     const programs =
-      responseData.programs.filter(
-        isProgram
-      );
+      responseData.programs.filter(isProgram);
 
-    return (
+    const matchedProgram =
       programs.find(
         (program) =>
-          program.id ===
-          planId
-      )?.name ?? ""
+          program.id === planId
+      );
+
+    return matchedProgram?.name ?? "";
+
+  } catch (error) {
+    console.error(
+      "Load program name failed:",
+      error
     );
-  } catch {
+
     return "";
   }
 }
@@ -1733,7 +1746,6 @@ function isRecord(
   );
 }
 
-
 function formatPersianDate(
   value: string
 ): string {
@@ -1741,45 +1753,37 @@ function formatPersianDate(
     return "—";
   }
 
-  const date =
-    new Date(
-      normalizeDigits(
-        value
-      )
+  const normalizedValue =
+    normalizeDigits(value).trim();
+
+  // استخراج مستقیم تاریخ از ابتدای مقدار
+  // بدون اعمال اختلاف منطقه زمانی
+  const match = normalizedValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})/
+  );
+
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    const date = new Date(
+      Date.UTC(year, month - 1, day, 12)
     );
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return value;
+    return new Intl.DateTimeFormat(
+      "fa-IR-u-ca-persian",
+      {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        timeZone: "UTC",
+      }
+    ).format(date);
   }
 
-  return new Intl.DateTimeFormat(
-    "fa-IR-u-ca-persian",
-    {
-      year:
-        "numeric",
-
-      month:
-        "2-digit",
-
-      day:
-        "2-digit",
-
-      hour:
-        "2-digit",
-
-      minute:
-        "2-digit",
-
-      timeZone:
-        "UTC",
-    }
-  ).format(date);
+  return value;
 }
-
 
 function getEducationTitle(
   education:

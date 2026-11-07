@@ -147,6 +147,10 @@ const isAdmin =
   Array.isArray(currentUserData.roles) &&
   currentUserData.roles.some((role) => role === "Admin");
 
+const isProvider =
+  Array.isArray(currentUserData.roles) &&
+  currentUserData.roles.some((role) => role === "Providers");
+
 const assignments = getUserAssignmentsFromToken(accessToken);
 const requestedNetwork = new URL(request.url).searchParams.get("networkId");
 let selectedNetworkId: number | null = null;
@@ -183,10 +187,29 @@ if (!networkIds.length) {
     isAdmin ? 400 : 403
   );
 }
-
+//این بخش بریا بعد که وب سرویس تهیه کننده و مشاهده گروه درست شد
 // ادمین به گروه حساب خودش محدود نیست؛ فیلتر گروه سایر کاربران حفظ می‌شود.
-const networkGroupId = isAdmin ? null : assignments?.networkGroupId ?? null;
+// const networkGroupId =
+//   isAdmin || isProvider
+//     ? null
+//     : assignments?.networkGroupId ?? null;
+// اطمینان از اینکه تهیه‌کننده گروه برنامه‌ساز دارد
+if (
+  isProvider &&
+  !assignments?.networkGroupId
+) {
+  return jsonError(
+    "گروه برنامه‌ساز برای تهیه‌کننده در توکن تعریف نشده است.",
+    403
+  );
+}
 
+// ادمین محدودیت گروه ندارد؛
+// سایر کاربران، از جمله تهیه‌کننده، فقط برنامه‌های گروه خود را می‌بینند.
+const networkGroupId =
+  isAdmin
+    ? null
+    : assignments?.networkGroupId ?? null;
 /*
  * دریافت برنامه‌های شبکه‌های کاربر
  */

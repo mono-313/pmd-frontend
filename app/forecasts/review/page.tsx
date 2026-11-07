@@ -840,57 +840,49 @@ export default function ForecastReviewPage() {
  * به تاریخ شمسی قابل نمایش
  */
 function formatJalaliDate(
-  value:
-    | string
-    | null
-    | undefined
+  value: string | null | undefined
 ): string {
   if (!value) {
     return "—";
   }
 
+  const normalizedValue = normalizeDigits(value.trim());
 
-  const normalizedValue =
-    normalizeDigits(
-      value
+  // اگر مقدار فقط تاریخ باشد، بدون تبدیل منطقه زمانی پردازش می‌شود.
+  const dateOnlyMatch = normalizedValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})$/
+  );
+
+  let date: Date;
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+
+    date = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      12,
+      0,
+      0
     );
-
-
-  const date =
-    new Date(
-      normalizedValue
-    );
-
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return "—";
+  } else {
+    date = new Date(normalizedValue);
   }
 
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
 
   return new Intl.DateTimeFormat(
     "fa-IR-u-ca-persian",
     {
-      year:
-        "numeric",
-
-      month:
-        "2-digit",
-
-      day:
-        "2-digit",
-
-      timeZone:
-        "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
     }
-  ).format(
-    date
-  );
+  ).format(date);
 }
-
 
 /*
  * تبدیل اعداد انگلیسی

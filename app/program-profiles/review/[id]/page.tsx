@@ -30,7 +30,7 @@ import type {
   ProgramProfileStatus,
 } from "@/app/types/program-profile";
 
-
+import ProgramName from "@/app/component/program/ProgramName";
 export default function ProgramProfileDetailsPage() {
   const router =
     useRouter();
@@ -453,11 +453,18 @@ export default function ProgramProfileDetailsPage() {
           <SpecificationsTable
             items={[
               {
-                label: "نام برنامه",
-                value: getProgramName(
-                  profile
-                ),
-              },
+  label: "نام برنامه",
+  value: (
+    <ProgramName
+      planId={profile.planId}
+      networkId={readRecordNumber(
+        profile,
+        "networkId"
+      )}
+      fallback={getProgramName(profile)}
+    />
+  ),
+},
               {
                 label: "موضوع اصلی",
                 value: displayText(
@@ -564,7 +571,7 @@ export default function ProgramProfileDetailsPage() {
                 "ردیف",
                 "نام عامل",
                 "نوع فعالیت",
-                "وضعیت حضور",
+                // "وضعیت حضور",
               ]}
             >
               {profile.crewMembers.map(
@@ -594,11 +601,11 @@ export default function ProgramProfileDetailsPage() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    {/* <TableCell>
                       {member.isPresent
                         ? "حاضر"
                         : "غایب"}
-                    </TableCell>
+                    </TableCell> */}
                   </tr>
                 )
               )}
@@ -623,7 +630,7 @@ export default function ProgramProfileDetailsPage() {
               headers={[
                 "ردیف",
                 "عنوان آیتم",
-                "نوع تولید",
+                // "نوع تولید",
                 "مدت",
               ]}
             >
@@ -648,15 +655,15 @@ export default function ProgramProfileDetailsPage() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    {/* <TableCell>
                       {displayText(
                         item.productionType
                       )}
-                    </TableCell>
+                    </TableCell> */}
 
                     <TableCell
                       ltr
-                      align="center"
+                      align="right"
                     >
                       {formatTime(
                         item.duration

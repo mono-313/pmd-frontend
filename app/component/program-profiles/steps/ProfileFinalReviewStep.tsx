@@ -95,6 +95,34 @@ export default function ProfileFinalReviewStep({
     }
 
 
+      // بررسی نام پرسنل؛ به‌جز فعالیت صدابردار
+  const invalidPersonnel = wizardData.crewMembers.some(
+    (member) => {
+      const isSoundRecordist =
+        member.activityTypeName
+          ?.trim()
+          .includes("صدابردار");
+
+      if (isSoundRecordist) {
+        return false;
+      }
+
+      return (
+        !member.personnelName?.trim() ||
+        !Number.isInteger(member.personnelId) ||
+        member.personnelId <= 0
+      );
+    }
+  );
+
+  if (invalidPersonnel) {
+    setError(
+      "نام پرسنل برای تمام عوامل الزامی است؛ به‌جز فعالیت صدابردار. لطفاً به مرحله عوامل برنامه برگردید و اطلاعات را اصلاح کنید."
+    );
+    return;
+  }
+
+  
     setIsSubmitting(true);
     setError("");
     setSuccessMessage("");
@@ -353,13 +381,13 @@ export default function ProfileFinalReviewStep({
             />
 
             <ReviewItem
-              label="مدت برنامه"
-              value={
-                toPersianNumber(
-                  specifications.duration
-                )
-              }
-            />
+                label="مدت برنامه"
+                value={
+                  formatDurationMinutes(
+                    specifications.duration
+                  )
+                }
+              />
 
             <ReviewItem
               label="ساعت شروع"
@@ -458,9 +486,9 @@ export default function ProfileFinalReviewStep({
                     نوع فعالیت
                   </TableHeader>
 
-                  <TableHeader>
+                  {/* <TableHeader>
                     حضور
-                  </TableHeader>
+                  </TableHeader> */}
                 </tr>
               </thead>
 
@@ -499,11 +527,11 @@ export default function ProfileFinalReviewStep({
                           }
                         </TableCell>
 
-                        <TableCell>
+                        {/* <TableCell>
                           {member.isPresent
                             ? "بله"
                             : "خیر"}
-                        </TableCell>
+                        </TableCell> */}
                       </tr>
                     )
                   )}
@@ -554,9 +582,9 @@ export default function ProfileFinalReviewStep({
                     عنوان آیتم
                   </TableHeader>
 
-                  <TableHeader align="right">
+                  {/* <TableHeader align="right">
                     نوع تولید
-                  </TableHeader>
+                  </TableHeader> */}
 
                   <TableHeader>
                     مدت
@@ -591,11 +619,11 @@ export default function ProfileFinalReviewStep({
                         }
                       </TableCell>
 
-                      <TableCell align="right">
+                      {/* <TableCell align="right">
                         {
                           item.productionType
                         }
-                      </TableCell>
+                      </TableCell> */}
 
                       <TableCell>
                         {toPersianNumber(
@@ -1208,6 +1236,31 @@ async function sendExpertsRequest(
   };
 }
 
+const minutesToTimeSpan = (value: unknown): string => {
+  const minutes = Number(
+    normalizeDigits(
+      getTrimmedString(value)
+    )
+  );
+
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return "00:00:00";
+  }
+
+  const totalSeconds = Math.floor(minutes * 60);
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const remainingMinutes = Math.floor(
+    (totalSeconds % 3600) / 60
+  );
+  const seconds = totalSeconds % 60;
+
+  return [
+    String(hours).padStart(2, "0"),
+    String(remainingMinutes).padStart(2, "0"),
+    String(seconds).padStart(2, "0"),
+  ].join(":");
+};
 
 function buildIssueRequest(
   wizardData: ProgramProfileWizardData
@@ -1228,36 +1281,81 @@ function buildIssueRequest(
     );
   }
 
-  /*
-   * تعیین نوع برنامه از روی نحوه تولید:
-   * 10 = زنده
-   * 20 = ضبطی یا تولیدی
-   */
+  // /*
+  //  * تعیین نوع برنامه از روی نحوه تولید:
+  //  * 10 = زنده
+  //  * 20 = ضبطی یا تولیدی
+  //  */
+  // const productionMethod =
+  //   getTrimmedString(
+  //     data.productionMethod
+  //   );
+
+  // let programType: 10 | 20;
+  // let programTypeName: string;
+
+  // if (
+  //   productionMethod.includes("زنده")
+  // ) {
+  //   programType = 10;
+  //   programTypeName = "زنده";
+  // } else if (
+  //   productionMethod.includes("ضبط") ||
+  //   productionMethod.includes("تولید")
+  // ) {
+  //   programType = 20;
+  //   programTypeName =
+  //     "ضبطی یا تولیدی";
+  // } else {
+  //   throw new Error(
+  //     "نحوه تولید برنامه معتبر نیست."
+  //   );
+  // }
+
+
   const productionMethod =
-    getTrimmedString(
-      data.productionMethod
-    );
+  getTrimmedString(
+    data.productionMethod
+  );
 
-  let programType: 10 | 20;
-  let programTypeName: string;
+const programType: 10 | 20 =
+  data.programType;
 
-  if (
-    productionMethod.includes("زنده")
-  ) {
-    programType = 10;
-    programTypeName = "زنده";
-  } else if (
-    productionMethod.includes("ضبط") ||
-    productionMethod.includes("تولید")
-  ) {
-    programType = 20;
-    programTypeName =
-      "ضبطی یا تولیدی";
-  } else {
-    throw new Error(
-      "نحوه تولید برنامه معتبر نیست."
-    );
-  }
+const programTypeName =
+  getTrimmedString(
+    data.programTypeName
+  );
+
+  //مدت زمان چک میکنم
+  const programDurationMinutes = Number(
+  normalizeDigits(data.duration)
+);
+
+if (
+  !Number.isFinite(programDurationMinutes) ||
+  programDurationMinutes <= 0
+) {
+  throw new Error(
+    "مدت برنامه معتبر نیست."
+  );
+}
+
+const totalItemsDurationSeconds =
+  wizardData.items.reduce(
+    (total, item) =>
+      total + timeSpanToSeconds(item.duration),
+    0
+  );
+
+const maxDurationSeconds =
+  programDurationMinutes * 60;
+
+if (totalItemsDurationSeconds > maxDurationSeconds) {
+  throw new Error(
+    "مجموع مدت آیتم‌های برنامه از مدت کل برنامه بیشتر است. لطفاً آیتم‌ها را اصلاح کنید."
+  );
+}
+
 
   const items =
     wizardData.items.map(
@@ -1280,14 +1378,7 @@ function buildIssueRequest(
           );
         }
 
-        if (!productionType) {
-          throw new Error(
-            `نوع تولید آیتم ردیف ${toPersianNumber(
-              index + 1
-            )} الزامی است.`
-          );
-        }
-
+      
         return {
           itemName,
           productionType,
@@ -1341,12 +1432,7 @@ function buildIssueRequest(
     networkGroupId:
       data.networkGroupId,
 
-    duration:
-      normalizeDigits(
-        getStringValue(
-          data.duration
-        )
-      ),
+   duration: minutesToTimeSpan(data.duration),
 
     broadcastDate:
       normalizeDigits(
@@ -1752,35 +1838,55 @@ function getAttendanceTitle(
 function formatJalaliDate(
   value: string
 ): string {
-  const date =
-    new Date(
-      normalizeDigits(value)
-    );
-
-
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    typeof value !== "string" ||
+    !value.trim()
   ) {
     return "—";
   }
 
+  const normalizedValue =
+    normalizeDigits(value.trim());
+
+  // استخراج تاریخ میلادی از ابتدای رشته
+  const dateMatch =
+    normalizedValue.match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+  if (!dateMatch) {
+    return "—";
+  }
+
+  const [, year, month, day] =
+    dateMatch;
+
+  const date =
+    new Date(
+      Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        12,
+        0,
+        0
+      )
+    );
+
+  if (
+    Number.isNaN(date.getTime())
+  ) {
+    return "—";
+  }
 
   return new Intl.DateTimeFormat(
     "fa-IR-u-ca-persian",
     {
-      year:
-        "numeric",
-
-      month:
-        "2-digit",
-
-      day:
-        "2-digit",
-
-      timeZone:
-        "UTC",
+      calendar: "persian",
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
     }
   ).format(date);
 }
@@ -1906,6 +2012,25 @@ function toPersianNumber(
   );
 }
 
+function timeSpanToSeconds(value: string): number {
+  const normalized = normalizeDigits(value.trim());
+
+  const match = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(
+    normalized
+  );
+
+  if (!match) {
+    throw new Error(
+      `فرمت مدت آیتم «${value}» معتبر نیست.`
+    );
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+
+  return hours * 3600 + minutes * 60 + seconds;
+}
 
 function normalizeDigits(
   value: string
@@ -1936,4 +2061,25 @@ function normalizeDigits(
           )
         )
     );
+}
+
+
+function formatDurationMinutes(value: string): string {
+  const minutes = Number(
+    normalizeDigits(value)
+  );
+
+  if (
+    !Number.isFinite(minutes) ||
+    minutes < 0
+  ) {
+    return "—";
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return toPersianNumber(
+    `${hours} ساعت و ${remainingMinutes} دقیقه`
+  );
 }

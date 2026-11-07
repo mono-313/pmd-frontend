@@ -152,6 +152,11 @@ export default function ProfileCrewStep({
     setEditError,
   ] = useState("");
 
+  const [
+    crewValidationError,
+    setCrewValidationError,
+  ] = useState("");
+
   const menuContainerRef =
     useRef<HTMLDivElement | null>(
       null
@@ -491,6 +496,64 @@ export default function ProfileCrewStep({
   }
 
 
+  /*
+   * بررسی تکراری نبودن ترکیب پرسنل و فعالیت
+   * یک پرسنل می‌تواند فعالیت متفاوتی داشته باشد،
+   * اما ترکیب یکسان فقط یک‌بار مجاز است.
+   */
+  /*
+ * اعتبارسنجی عوامل قبل از رفتن به مرحله بعد
+ */
+function handleNext() {
+  // بررسی الزامی بودن نام پرسنل
+  // به‌جز فعالیت صدابردار
+  const invalidPersonnel = crewMembers.some(
+    (member) => {
+      const isSoundRecordist =
+        member.activityTypeName
+          ?.trim()
+          .includes("صدابردار");
+
+      if (isSoundRecordist) {
+        return false;
+      }
+
+      return (
+        !member.personnelName?.trim() ||
+        !Number.isInteger(member.personnelId) ||
+        member.personnelId <= 0
+      );
+    }
+  );
+
+  if (invalidPersonnel) {
+    setCrewValidationError(
+      "انتخاب نام پرسنل برای تمام عوامل الزامی است؛ به‌جز فعالیت صدابردار."
+    );
+    return;
+  }
+
+  // بررسی تکراری نبودن ترکیب پرسنل و فعالیت
+  const registeredCombinations = new Set<string>();
+
+  for (const member of crewMembers) {
+    const combinationKey =
+      `${member.personnelId}-${member.activityTypeId}`;
+
+    if (registeredCombinations.has(combinationKey)) {
+      setCrewValidationError(
+        "دو ردیف یا بیشتر، همزمان شامل نام پرسنل و فعالیت تکراری هستند. لطفاً نام پرسنل را بررسی نمایید."
+      );
+      return;
+    }
+
+    registeredCombinations.add(combinationKey);
+  }
+
+  setCrewValidationError("");
+  onNext();
+}
+
   return (
     <>
       <section
@@ -636,7 +699,7 @@ export default function ProfileCrewStep({
                  فعالیت
                 </th>
 
-                <th
+                {/* <th
                   className="
                     px-4 py-4
                     text-center
@@ -644,7 +707,7 @@ export default function ProfileCrewStep({
                   "
                 >
                   وضعیت حضور
-                </th>
+                </th> */}
 
                 <th
                   className="
@@ -719,7 +782,7 @@ export default function ProfileCrewStep({
                     </td>
 
 
-                    <td
+                    {/* <td
                       className="
                         px-4 py-4
                         text-center
@@ -768,7 +831,7 @@ export default function ProfileCrewStep({
                           ? "حاضر"
                           : "غایب"}
                       </button>
-                    </td>
+                    </td> */}
 
 
                     <td
@@ -825,9 +888,9 @@ export default function ProfileCrewStep({
                             className="
                               absolute
                               left-0
-                              top-full
-                              z-30
-                              mt-1
+                              bottom-full
+                              z-50
+                              mb-1
                               w-36
                               overflow-hidden
                               rounded-lg
@@ -923,6 +986,24 @@ export default function ProfileCrewStep({
         </div>
 
 
+        {crewValidationError && (
+          <div
+            role="alert"
+            className="
+              mt-5
+              rounded-lg
+              border border-red-200
+              bg-red-50
+              px-4 py-3
+              text-sm
+              font-medium
+              text-red-700
+            "
+          >
+            {crewValidationError}
+          </div>
+        )}
+
         {/* دکمه‌های جابه‌جایی */}
         <footer
           className="
@@ -967,7 +1048,7 @@ export default function ProfileCrewStep({
           <button
             type="button"
             onClick={
-              onNext
+              handleNext
             }
             className="
               inline-flex
@@ -1299,8 +1380,8 @@ export default function ProfileCrewStep({
         </div>
       )}
 
-
-      {/* پنجره تأیید تغییر وضعیت حضور */}
+{/* 
+      پنجره تأیید تغییر وضعیت حضور
       {attendanceIndex !== null && (
         <div
           className="
@@ -1436,7 +1517,7 @@ export default function ProfileCrewStep({
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
 
       {/* پنجره تأیید حذف */}

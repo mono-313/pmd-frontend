@@ -1,0 +1,1879 @@
+"use client";
+
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  AlertCircle,
+  CalendarDays,
+  FilePlus2,
+  LoaderCircle,
+  MoreVertical,
+  CheckCircle2,
+  RotateCcw,
+  Search,
+} from "lucide-react";
+
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
+
+import type {
+  ForecastResponse,
+  PaginationMetadata,
+} from "@/app/types/forecast";
+
+import DatePicker from
+  "react-multi-date-picker";
+
+import DateObject from
+  "react-date-object";
+
+import persian from
+  "react-date-object/calendars/persian";
+
+import gregorian from
+  "react-date-object/calendars/gregorian";
+
+import persianFa from
+  "react-date-object/locales/persian_fa";
+
+import gregorianEn from
+  "react-date-object/locales/gregorian_en";
+
+
+import IssueProgramProfileDialog from
+  "@/app/component/program-profiles/IssueProgramProfileDialog";
+
+interface ApprovedForecastListResponse {
+  items: ForecastResponse[];
+
+  pagination: PaginationMetadata;
+}
+
+
+interface IssuedProfileReference {
+  id: string;
+
+  forecastId: string;
+}
+
+
+export default function ApprovedForecastsPage() {
+  return (
+    <Suspense fallback={<div className="p-6">در حال دریافت موضوعات...</div>}>
+      <ApprovedForecastsContent />
+    </Suspense>
+  );
+}
+
+function ApprovedForecastsContent() {
+  const router =
+    useRouter();
+
+  const menuContainerRef =
+    useRef<HTMLDivElement | null>(
+      null
+    );
+
+  const [
+    forecasts,
+    setForecasts,
+  ] = useState<ForecastResponse[]>(
+    []
+  );
+
+  const [
+    pagination,
+    setPagination,
+  ] = useState<PaginationMetadata | null>(
+    null
+  );
+
+
+  const [
+    fromDate,
+    setFromDate,
+  ] = useState<DateObject | null>(
+    null
+  );
+
+  const [
+    toDate,
+    setToDate,
+  ] = useState<DateObject | null>(
+    null
+  );
+
+  const [
+    appliedFromDate,
+    setAppliedFromDate,
+  ] = useState<string>("");
+
+  const [
+    appliedToDate,
+    setAppliedToDate,
+  ] = useState<string>("");
+
+  const [
+    currentPage,
+    setCurrentPage,
+  ] = useState(1);
+
+  const [
+    openMenuId,
+    setOpenMenuId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
+
+
+  const [
+    programNames,
+    setProgramNames,
+  ] = useState<Record<number, string>>(
+    {}
+  );
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  const [
+    issuedProfiles,
+    setIssuedProfiles,
+  ] = useState<Record<string, string>>(
+    {}
+  );
+
+/*
+ * Forecast انتخاب‌شده برای
+ * صدور شناسنامه
+ */
+const [
+  selectedForecastId,
+  setSelectedForecastId,
+] = useState<string | null>(
+  null
+);
+
+
+/*
+ * برای تازه‌سازی لیست بعد
+ * از صدور شناسنامه
+ */
+const [
+  refreshKey,
+  setRefreshKey,
+] = useState(0);
+
+
+/*
+ * پیام موفقیت
+ */
+const [
+  issueSuccessMessage,
+  setIssueSuccessMessage,
+] = useState("");
+
+  // لینک اعلان فقط ردیف را پیدا می‌کند؛ پنجره صدور باز نمی‌شود.
+  const searchParams = useSearchParams();
+  const targetForecastId = 
+  searchParams.get("forecastId")?.trim() || "";
+  const [locatedTarget, setLocatedTarget] = useState("");
+  const [notificationError, setNotificationError] = useState("");
+  const scrolledTarget = useRef<string | null>(null);
+  const locatingTarget = Boolean(targetForecastId && locatedTarget 
+    !== targetForecastId);
+
+  useEffect(() => {
+    scrolledTarget.current = null;
+    setNotificationError("");
+    setLocatedTarget("");
+    if (!targetForecastId) 
+      return;
+
+    const controller = new AbortController();
+    let disposed = false;
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    // فقط هنگام ورود از اعلان، فیلتر تاریخ پاک می‌شود.
+    setFromDate(null);
+    setToDate(null);
+    setAppliedFromDate("");
+    setAppliedToDate("");
+
+    void findApprovedForecastPage(targetForecastId, controller.signal)
+      .then(page => {
+        if (disposed) return;
+        if (page === null) {
+          setNotificationError("پیش‌بینی این اعلان در موضوعات تأییدشدهٔ قابل دسترس پیدا نشد.");
+        } 
+        else {
+          setCurrentPage(page);
+        }
+      })
+      .catch((cause: unknown) => {
+        if (disposed) 
+          return;
+        setNotificationError(controller.signal.aborted
+          ? "زمان جست‌وجوی ردیف به پایان رسید؛ دوباره تلاش کنید."
+          : cause instanceof Error ? cause.message 
+          : "پیداکردن ردیف اعلان انجام نشد.");
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (!disposed) setLocatedTarget(targetForecastId);
+      });
+
+    return () => {
+      disposed = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [targetForecastId]);
+
+  useEffect(() => {
+    if (!targetForecastId || locatingTarget || isLoading ||
+        scrolledTarget.current === targetForecastId ||
+        !forecasts.some(item => item.id === targetForecastId)) 
+        return;
+    const frame = requestAnimationFrame(() => {
+    const row = document.getElementById(`forecast-row-${targetForecastId}`);
+      if (!row) return;
+
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.focus({ preventScroll: true });
+      scrolledTarget.current = targetForecastId;
+    });
+    return () => cancelAnimationFrame(frame);
+  },
+   [targetForecastId, locatingTarget, isLoading, forecasts]);
+
+  /*
+   * دریافت فقط Forecastهای تأییدشده
+   */
+  const loadApprovedForecasts =
+    useCallback(
+      async (signal?: AbortSignal) => {
+        try {
+          setIsLoading(true);
+          setError("");
+
+          const query =
+            new URLSearchParams({
+              status:
+                "Approved",
+
+              pageNumber:
+                String(
+                  currentPage
+                ),
+
+              pageSize:
+                "10",
+            });
+
+          /*
+           * تاریخ ورودی HTML به شکل
+           * YYYY-MM-DD و با ارقام انگلیسی است.
+           */
+          if (appliedFromDate) {
+            query.set(
+              "fromDate",
+              `${appliedFromDate}T00:00:00.000Z`
+            );
+          }
+
+          if (appliedToDate) {
+            query.set(
+              "toDate",
+              `${appliedToDate}T23:59:59.999Z`
+            );
+          }
+
+          const response =
+            await fetch(
+              `/api/forecasts?${query.toString()}`,
+              {
+                signal,
+                method:
+                  "GET",
+
+                headers: {
+                  Accept:
+                    "application/json",
+                },
+
+                cache:
+                  "no-store",
+              }
+            );
+
+          const responseText =
+            await response.text();
+
+          const responseData =
+            parseJsonResponse(
+              responseText
+            );
+
+          if (!response.ok) {
+            throw new Error(
+              getErrorMessage(
+                responseData
+              ) ??
+                `دریافت موضوعات تأییدشده انجام نشد. کد پاسخ: ${response.status}`
+            );
+          }
+
+          console.log(
+  "Approved forecasts response:",
+  responseData
+);
+
+if (
+  !isRecord(responseData) ||
+  !Array.isArray(
+    responseData.items
+  )
+) {
+  console.error(
+    "Invalid approved forecasts response:",
+    responseData
+  );
+
+  throw new Error(
+    "ساختار پاسخ فهرست موضوعات تأییدشده معتبر نیست."
+  );
+}
+
+if (signal?.aborted) return;
+
+setForecasts(
+  responseData.items as
+    ForecastResponse[]
+);
+
+
+/*
+ * دریافت شناسنامه‌های صادرشده برای تشخیص اینکه
+ * هر Forecast قبلاً به شناسنامه تبدیل شده یا خیر.
+ * خطای این سرویس نباید فهرست موضوعات تأییدشده را متوقف کند.
+ */
+try {
+  const profilesResponse =
+    await fetch(
+      "/api/program-profiles?pageNumber=1&pageSize=1000",
+      {
+        signal,
+                method: "GET",
+
+        headers: {
+          Accept:
+            "application/json",
+        },
+
+        cache:
+          "no-store",
+      }
+    );
+
+
+  const profilesText =
+    await profilesResponse.text();
+
+  const profilesData =
+    parseJsonResponse(
+      profilesText
+    );
+
+
+  if (signal?.aborted) return;
+
+  if (!profilesResponse.ok) {
+    console.error(
+      "Program profiles request failed:",
+      {
+        status:
+          profilesResponse.status,
+
+        response:
+          profilesData ??
+          profilesText,
+      }
+    );
+
+    setIssuedProfiles({});
+  } else {
+    const issuedReferences =
+      extractIssuedProfileReferences(
+        profilesData
+      );
+
+    setIssuedProfiles(
+      Object.fromEntries(
+        issuedReferences.map(
+          (profile) => [
+            profile.forecastId,
+            profile.id,
+          ]
+        )
+      )
+    );
+  }
+} catch (profilesError) {
+  if (signal?.aborted) return;
+  console.error(
+    "Load issued profiles error:",
+    profilesError
+  );
+
+  setIssuedProfiles({});
+}
+
+if (
+  isRecord(
+    responseData.pagination
+  )
+) {
+  setPagination(
+    responseData.pagination as
+      unknown as
+      PaginationMetadata
+  );
+} else {
+  setPagination(null);
+}
+        } catch (loadError) {
+          if (signal?.aborted) return;
+          setForecasts([]);
+          setPagination(null);
+          setIssuedProfiles({});
+
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "دریافت اطلاعات انجام نشد."
+          );
+        } finally {
+          if (!signal?.aborted) setIsLoading(false);
+        }
+      },
+      [
+        appliedFromDate,
+        appliedToDate,
+        currentPage,
+        refreshKey,
+      ]
+    );
+
+const readyToIssueForecasts = forecasts.filter(
+  (forecast) => !issuedProfiles[forecast.id]
+);
+
+  /*
+   * دریافت برنامه‌های قابل دسترس کاربر و ساخت
+   * نگاشت planId به نام برنامه.
+   */
+  const loadPrograms =
+    useCallback(async () => {
+      try {
+        const response =
+          await fetch(
+            "/api/programs",
+            {
+              method: "GET",
+
+              headers: {
+                Accept:
+                  "application/json",
+              },
+
+              cache:
+                "no-store",
+            }
+          );
+
+        const responseText =
+          await response.text();
+
+        const responseData =
+          parseJsonResponse(
+            responseText
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            getErrorMessage(
+              responseData
+            ) ??
+              `دریافت برنامه‌ها انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        const programs =
+          extractPrograms(
+            responseData
+          );
+
+        const nextProgramNames:
+          Record<number, string> = {};
+
+        for (
+          const program of
+          programs
+        ) {
+          nextProgramNames[
+            program.id
+          ] = program.name;
+        }
+
+        setProgramNames(
+          nextProgramNames
+        );
+      } catch (loadError) {
+        console.error(
+          "Load programs error:",
+          loadError
+        );
+
+        /*
+         * خطای برنامه‌ها نباید مانع
+         * نمایش فهرست موضوعات شود.
+         */
+        setProgramNames({});
+      }
+    }, []);
+
+
+  useEffect(() => {
+    if (locatingTarget) return;
+    const controller = new AbortController();
+    void loadApprovedForecasts(controller.signal);
+    return () => controller.abort();
+  }, [loadApprovedForecasts, locatingTarget]);
+
+
+  useEffect(() => {
+    void loadPrograms();
+  }, [loadPrograms]);
+
+
+  /*
+   * بسته‌شدن منوی سه‌نقطه
+   * با کلیک بیرون از آن
+   */
+  useEffect(() => {
+    function handleOutsideClick(
+      event: MouseEvent
+    ) {
+      if (
+        menuContainerRef.current &&
+        !menuContainerRef.current.contains(
+          event.target as Node
+        )
+      ) {
+        setOpenMenuId(null);
+      }
+    }
+
+    document.addEventListener(
+      "mousedown",
+      handleOutsideClick
+    );
+
+    return () => {
+      document.removeEventListener(
+        "mousedown",
+        handleOutsideClick
+      );
+    };
+  }, []);
+
+
+function handleApplyFilters() {
+  setError("");
+
+  const fromGregorian =
+    fromDate
+      ? convertPersianDateToGregorian(
+          fromDate
+        )
+      : "";
+
+  const toGregorian =
+    toDate
+      ? convertPersianDateToGregorian(
+          toDate
+        )
+      : "";
+
+  if (
+    fromGregorian &&
+    toGregorian &&
+    fromGregorian > toGregorian
+  ) {
+    setError(
+      "تاریخ شروع نباید بعد از تاریخ پایان باشد."
+    );
+
+    return;
+  }
+
+  /*
+   * مقادیر تبدیل‌شده میلادی
+   * برای Query ذخیره می‌شوند.
+   */
+  setAppliedFromDate(
+    fromGregorian
+  );
+
+  setAppliedToDate(
+    toGregorian
+  );
+
+  setCurrentPage(1);
+}
+
+
+function handleResetFilters() {
+  setFromDate(null);
+  setToDate(null);
+
+  setAppliedFromDate("");
+  setAppliedToDate("");
+
+  setCurrentPage(1);
+  setError("");
+}
+
+
+//close-modal
+function handleCloseIssueDialog() {
+  setSelectedForecastId(
+    null
+  );
+}
+
+//صدور موفق شناسنامه
+function handleProfileIssued(
+  profileId: string
+) {
+  const issuedForecastId =
+    selectedForecastId;
+
+  /*
+   * بستن Modal
+   */
+  setSelectedForecastId(
+    null
+  );
+
+  /*
+   * نمایش پیام
+   */
+  setIssueSuccessMessage(
+    "شناسنامه با موفقیت صادر شد."
+  );
+
+  if (issuedForecastId) {
+    setIssuedProfiles(
+      (previous) => ({
+        ...previous,
+
+        [issuedForecastId]:
+          profileId,
+      })
+    );
+  }
+
+  /*
+   * دریافت مجدد موضوعات از Backend
+   */
+  setRefreshKey(
+    (previous) =>
+      previous + 1
+  );
+
+
+  /*
+   * حذف خودکار پیام
+   */
+  window.setTimeout(
+    () => {
+      setIssueSuccessMessage("");
+    },
+    4000
+  );
+}
+
+//main
+
+  return (
+  <>
+    <main
+      className="
+        min-h-screen
+        bg-gray-50
+        px-4 py-8
+      "
+      dir="rtl"
+    >
+      <section
+        className="
+          mx-auto
+          max-w-7xl
+        "
+      >
+        <header className="mb-6">
+          <h1
+            className="
+              text-2xl
+              font-bold
+              text-gray-800
+            "
+          >
+           صدور شناسنامه
+          </h1>
+
+          <p
+            className="
+              mt-2
+              text-sm
+              text-gray-500
+            "
+          >
+            لیست موضوعات در انتظار صدور شناسنامه
+          </p>
+        </header>
+
+
+
+        {issueSuccessMessage && (
+          <div
+            className="
+              mb-5
+              flex
+              items-center
+              gap-3
+              rounded-xl
+              border border-green-200
+              bg-green-50
+              px-4 py-3
+              text-sm
+              font-semibold
+              text-green-700
+            "
+          >
+            <CheckCircle2
+              size={20}
+            />
+
+            {issueSuccessMessage}
+          </div>
+        )}
+
+
+        {notificationError && (
+          <p role="alert" className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-900">
+            {notificationError}
+          </p>
+        )}
+
+        {error && (
+          <div
+            role="alert"
+            className="
+              mb-6
+              flex
+              items-start
+              gap-3
+              rounded-xl
+              border
+              border-red-200
+              bg-red-50
+              p-4
+              text-red-700
+            "
+          >
+            <AlertCircle
+              size={21}
+              className="shrink-0"
+            />
+
+            <p>{error}</p>
+          </div>
+        )}
+
+
+        <section
+          className="
+            overflow-visible
+            rounded-2xl
+            border
+            border-gray-200
+            bg-white
+            shadow-sm
+          "
+        >
+          {isLoading || locatingTarget ? (
+            <div
+              className="
+                flex
+                min-h-64
+                items-center
+                justify-center
+                gap-3
+                text-gray-600
+              "
+            >
+              <LoaderCircle
+                size={24}
+                className="animate-spin"
+              />
+
+              در حال دریافت موضوعات...
+            </div>
+          ) : readyToIssueForecasts.length === 0 ? (
+            <div
+              className="
+                flex
+                min-h-64
+                items-center
+                justify-center
+                text-gray-500
+              "
+            >
+             موضوعی در انتظار صدور شناسنامه نمی‌باشد
+            </div>
+          ) : (
+            <div className="overflow-x-auto overflow-y-visible">
+              <table
+                className="
+                  w-full
+                  table-fixed
+                  border-collapse
+                "
+              >
+                <colgroup>
+                    <col className="w-[3%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[4%]" />
+                    <col className="w-[15%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[7%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[7%]" />
+                </colgroup>
+                <thead>
+                  <tr
+                    className="
+                      bg-gray-50
+                      text-right
+                      text-sm
+                      text-gray-600
+                    "
+                  >
+                    <th className={headerClass}>
+                      ردیف
+                    </th>
+
+                    <th className={headerClass}>
+                      نام برنامه
+                    </th>
+
+                    <th className={headerClass}>
+                      قسمت
+                    </th>
+
+                    <th className={headerClass}>
+                      موضوع اصلی
+                    </th>
+
+                    <th className={headerClass}>
+                      تاریخ پخش
+                    </th>
+
+                    <th className={headerClass}>
+                      ثبت‌کننده
+                    </th>
+
+                    <th className={headerClass}>
+                      وضعیت
+                    </th>
+
+                    <th
+                      className={`
+                        ${headerClass}
+                        w-20
+                        text-center
+                      `}
+                    >
+                      عملیات
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {readyToIssueForecasts.map(
+                    (forecast, index) => (
+                      <tr
+                        key={forecast.id}
+                        id={`forecast-row-${forecast.id}`}
+                        tabIndex={forecast.id === targetForecastId ? -1 : undefined}
+                        className={`border-t border-gray-200 text-sm transition ${
+                          forecast.id === targetForecastId
+                            ? "bg-amber-100 ring-2 ring-inset ring-amber-400"
+                            : "hover:bg-blue-50/40"
+                        }`}
+                      >
+                        <td className={cellClass}>
+                          {(
+                              currentPage - 1
+                            ) * 10 + index + 1}
+                        </td>
+
+                        <td
+                          className="
+                            px-3 py-4
+                            align-middle
+                            text-sm
+                            text-gray-700
+                          "
+                        >
+                          <span
+                            className="
+                              block
+                              overflow-hidden
+                              text-ellipsis
+                              break-words
+                              whitespace-normal
+                              leading-6
+                              line-clamp-2
+                            "
+                            title={getProgramName(
+                              programNames,
+                              forecast.planId
+                            )}
+                          >
+                            {getProgramName(
+                              programNames,
+                              forecast.planId
+                            )}
+                          </span>
+                        </td>
+
+
+                        <td className={cellClass}>
+                          {forecast.episodeNumber}
+                        </td>
+
+                        <td
+                          className={`
+                            ${cellClass}
+                            max-w-xs
+                            
+                            text-gray-800
+                          `}
+                        >
+                          {forecast.mainTopic}
+                        </td>
+
+                        <td className={cellClass}>
+                          {formatPersianDate(
+                            forecast.broadcastDate
+                          )}
+                        </td>
+
+                        <td className={cellClass}>
+                          {forecast.createdByUserName ||
+                            "—"}
+                        </td>
+
+                        <td className={cellClass}>
+                          <span
+                            className={`
+                              inline-flex
+                              rounded-full
+                              px-3 py-1
+                              text-xs
+                              font-bold
+                              ${
+                                issuedProfiles[
+                                  forecast.id
+                                ]
+                                  ? "bg-blue-100 text-[#007fcf]"
+                                  : "bg-green-100 text-green-700"
+                              }
+                            `}
+                          >
+                            {issuedProfiles[
+                              forecast.id
+                            ]
+                              ? "شناسنامه صادرشده"
+                              : "تأییدشده-آماده صدور"}
+                          </span>
+                        </td>
+
+                        <td
+                          className={`
+                            ${cellClass}
+                            text-center
+                          `}
+                        >
+                          <div
+                            ref={
+                              openMenuId ===
+                              forecast.id
+                                ? menuContainerRef
+                                : undefined
+                            }
+                            className="
+                              relative
+                              inline-block
+                            "
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenMenuId(
+                                  (
+                                    previous
+                                  ) =>
+                                    previous ===
+                                    forecast.id
+                                      ? null
+                                      : forecast.id
+                                )
+                              }
+                              className="
+                                rounded-lg
+                                p-2
+                                text-gray-600
+                                transition
+                                hover:bg-gray-100
+                                hover:text-[#007fcf]
+                              "
+                              aria-label="نمایش عملیات"
+                              aria-expanded={
+                                openMenuId ===
+                                forecast.id
+                              }
+                            >
+                              <MoreVertical
+                                size={21}
+                              />
+                            </button>
+
+                            {openMenuId ===
+                              forecast.id && (
+                              <div
+                                className="
+  absolute
+  left-0
+  bottom-full
+  z-50
+  mb-1
+  w-56
+  overflow-hidden
+  rounded-xl
+  border
+  border-gray-200
+  bg-white
+  p-1
+  text-right
+  shadow-xl
+"
+                              >
+                                {issuedProfiles[
+                                  forecast.id
+                                ] ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const profileId =
+                                        issuedProfiles[
+                                          forecast.id
+                                        ];
+
+                                      setOpenMenuId(null);
+
+                                      router.push(
+                                        `/program-profiles/${encodeURIComponent(
+                                          profileId
+                                        )}`
+                                      );
+                                    }}
+                                    className="
+                                      flex
+                                      w-full
+                                      items-center
+                                      gap-3
+                                      rounded-lg
+                                      px-3 py-3
+                                      text-sm
+                                      font-semibold
+                                      text-[#007fcf]
+                                      transition
+                                      hover:bg-blue-50
+                                    "
+                                  >
+                                    مشاهده شناسنامه
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIssueSuccessMessage("");
+
+                                      setSelectedForecastId(
+                                        forecast.id
+                                      );
+
+                                      setOpenMenuId(null);
+                                    }}
+                                    className="
+                                    flex
+                                    w-full
+                                    items-center
+                                    gap-3
+                                    rounded-lg
+                                    px-3 py-3
+                                    text-sm
+                                    font-semibold
+                                    text-gray-700
+                                    transition
+                                    hover:bg-blue-50
+                                    hover:text-[#007fcf]
+                                  "
+                                  >
+                                    تبدیل به شناسنامه
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+
+          {/* صفحه‌بندی */}
+          {!isLoading &&
+            pagination &&
+            pagination.totalPages > 1 && (
+              <footer
+                className="
+                  flex
+                  items-center
+                  justify-between
+                  border-t
+                  border-gray-200
+                  px-5 py-4
+                "
+              >
+                <p
+                  className="
+                    text-sm
+                    text-gray-500
+                  "
+                >
+                  تعداد کل:
+
+                  <span
+                    className="
+                      mr-1
+                      font-bold
+                      text-gray-700
+                    "
+                  >
+                    {pagination.totalCount}
+                  </span>
+                </p>
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-2
+                  "
+                >
+                  <button
+                    type="button"
+                    disabled={
+                      !pagination.hasPrevious
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          previous
+                        ) =>
+                          Math.max(
+                            previous - 1,
+                            1
+                          )
+                      )
+                    }
+                    className={paginationButtonClass}
+                  >
+                    قبلی
+                  </button>
+
+                  <span
+                    className="
+                      px-3
+                      text-sm
+                      text-gray-600
+                    "
+                  >
+                    صفحه {pagination.currentPage}
+                    از {pagination.totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={
+                      !pagination.hasNext
+                    }
+                    onClick={() =>
+                      setCurrentPage(
+                        (
+                          previous
+                        ) =>
+                          previous + 1
+                      )
+                    }
+                    className={paginationButtonClass}
+                  >
+                    بعدی
+                  </button>
+                </div>
+              </footer>
+            )}
+        </section>
+      </section>
+</main>
+
+      <IssueProgramProfileDialog
+         isOpen={
+          selectedForecastId !==
+          null
+        }
+
+        forecastId={
+          selectedForecastId
+        }
+
+        onClose={
+          handleCloseIssueDialog
+        }
+
+        onIssued={
+          handleProfileIssued
+        }
+      />
+    </>
+  );
+}
+
+function extractIssuedProfileReferences(
+  value: unknown
+): IssuedProfileReference[] {
+  const result:
+    IssuedProfileReference[] = [];
+
+  const visited =
+    new Set<unknown>();
+
+
+  function visit(
+    currentValue: unknown
+  ) {
+    if (
+      currentValue === null ||
+      typeof currentValue !==
+        "object" ||
+      visited.has(
+        currentValue
+      )
+    ) {
+      return;
+    }
+
+
+    visited.add(
+      currentValue
+    );
+
+
+    if (Array.isArray(currentValue)) {
+      currentValue.forEach(
+        visit
+      );
+
+      return;
+    }
+
+
+    const record =
+      currentValue as Record<
+        string,
+        unknown
+      >;
+
+    const id =
+      readFirstString(
+        record,
+        [
+          "id",
+          "Id",
+          "profileId",
+          "ProfileId",
+        ]
+      );
+
+    const forecastId =
+      readFirstString(
+        record,
+        [
+          "forecastId",
+          "ForecastId",
+        ]
+      );
+
+
+    if (
+      id &&
+      forecastId &&
+      !result.some(
+        (item) =>
+          item.forecastId ===
+          forecastId
+      )
+    ) {
+      result.push({
+        id,
+
+        forecastId,
+      });
+    }
+
+
+    Object.values(record)
+      .forEach(
+        visit
+      );
+  }
+
+
+  visit(value);
+
+  return result;
+}
+
+
+function readFirstString(
+  value: Record<
+    string,
+    unknown
+  >,
+  fields: string[]
+): string {
+  for (const field of fields) {
+    const fieldValue =
+      value[field];
+
+    if (
+      typeof fieldValue ===
+        "string" &&
+      fieldValue.trim()
+    ) {
+      return fieldValue.trim();
+    }
+  }
+
+  return "";
+}
+
+
+function isApprovedForecastListResponse(
+  value: unknown
+): value is ApprovedForecastListResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    Array.isArray(value.items) &&
+    value.items.every(
+      isForecastResponse
+    ) &&
+    isPaginationMetadata(
+      value.pagination
+    )
+  );
+}
+
+
+function isForecastResponse(
+  value: unknown
+): value is ForecastResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id ===
+      "string" &&
+
+    typeof value.planId ===
+      "number" &&
+
+    typeof value.mainTopic ===
+      "string" &&
+
+    typeof value.broadcastDate ===
+      "string" &&
+
+    typeof value.status ===
+      "string"
+  );
+}
+
+
+function isPaginationMetadata(
+  value: unknown
+): value is PaginationMetadata {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.currentPage ===
+      "number" &&
+
+    typeof value.totalPages ===
+      "number" &&
+
+    typeof value.pageSize ===
+      "number" &&
+
+    typeof value.totalCount ===
+      "number" &&
+
+    typeof value.hasPrevious ===
+      "boolean" &&
+
+    typeof value.hasNext ===
+      "boolean"
+  );
+}
+
+
+function isRecord(
+  value: unknown
+): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value)
+  );
+}
+
+
+function parseJsonResponse(
+  responseText: string
+): unknown | null {
+  if (!responseText.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(
+      responseText
+    ) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+
+function getErrorMessage(
+  value: unknown
+): string | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  if (
+    typeof value.message ===
+    "string"
+  ) {
+    return value.message;
+  }
+
+  if (
+    typeof value.description ===
+    "string"
+  ) {
+    return value.description;
+  }
+
+  return null;
+}
+
+
+function formatPersianDate(
+  value: string
+): string {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    "fa-IR",
+    {
+      year:
+        "numeric",
+
+      month:
+        "2-digit",
+
+      day:
+        "2-digit",
+    }
+  ).format(date);
+}
+
+
+function getRowNumber(
+  index: number,
+  pagination: PaginationMetadata | null
+): number {
+  if (!pagination) {
+    return index + 1;
+  }
+
+  return (
+    (
+      pagination.currentPage - 1
+    ) *
+      pagination.pageSize +
+    index +
+    1
+  );
+}
+
+
+const headerClass =
+  "whitespace-nowrap px-4 py-4 font-semibold";
+
+const cellClass =
+  "px-4 py-4 text-gray-600";
+
+const paginationButtonClass =
+  `
+    rounded-lg
+    border
+    border-gray-300
+    px-4 py-2
+    text-sm
+    font-semibold
+    text-gray-700
+    transition
+    hover:bg-gray-50
+    disabled:cursor-not-allowed
+    disabled:opacity-40
+  `;
+
+
+
+
+  function convertPersianDateToGregorian(
+  value: DateObject
+): string {
+  return new DateObject(value)
+    .convert(
+      gregorian,
+      gregorianEn
+    )
+    .format("YYYY-MM-DD");
+}
+
+
+interface ProgramListItem {
+  id: number;
+  name: string;
+}
+
+
+/*
+ * استخراج آرایه برنامه‌ها از پاسخ‌های متداول
+ * Route داخلی و وب‌سرویس اطلاعات پایه.
+ */
+function extractPrograms(
+  value: unknown
+): ProgramListItem[] {
+  const rawPrograms =
+    findProgramsArray(value);
+
+  if (!rawPrograms) {
+    console.error(
+      "Programs array was not found:",
+      value
+    );
+
+    return [];
+  }
+
+  return rawPrograms
+    .map(normalizeProgram)
+    .filter(
+      (
+        program
+      ): program is ProgramListItem =>
+        program !== null
+    );
+}
+
+
+function findProgramsArray(
+  value: unknown
+): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const possibleFields = [
+    "programs",
+    "Programs",
+    "items",
+    "Items",
+    "data",
+    "Data",
+    "result",
+    "Result",
+  ];
+
+  for (
+    const fieldName of
+    possibleFields
+  ) {
+    const fieldValue =
+      value[fieldName];
+
+    if (Array.isArray(fieldValue)) {
+      return fieldValue;
+    }
+
+    if (isRecord(fieldValue)) {
+      const nestedArray =
+        findProgramsArray(
+          fieldValue
+        );
+
+      if (nestedArray) {
+        return nestedArray;
+      }
+    }
+  }
+
+  return null;
+}
+
+
+function normalizeProgram(
+  value: unknown
+): ProgramListItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const rawId =
+    value.id ??
+    value.Id ??
+    value.value ??
+    value.Value ??
+    value.planId ??
+    value.PlanId;
+
+  const rawName =
+    value.name ??
+    value.Name ??
+    value.text ??
+    value.Text ??
+    value.title ??
+    value.Title ??
+    value.planName ??
+    value.PlanName;
+
+  const id =
+    readNumericValue(rawId);
+
+  const name =
+    typeof rawName === "string"
+      ? rawName.trim()
+      : "";
+
+  if (
+    id === null ||
+    !name
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+  };
+}
+
+
+
+
+function getProgramName(
+  programNames:
+    Record<number, string>,
+  planId: unknown
+): string {
+  const normalizedPlanId =
+    readNumericValue(planId);
+
+  if (normalizedPlanId === null) {
+    return "—";
+  }
+
+  return (
+    programNames[
+      normalizedPlanId
+    ] ??
+    `برنامه شماره ${normalizedPlanId}`
+  );
+}
+
+
+function readNumericValue(
+  value: unknown
+): number | null {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" &&
+          value.trim()
+        ? Number(
+            normalizeDigits(
+              value
+            )
+          )
+        : Number.NaN;
+
+  return Number.isFinite(
+    numericValue
+  )
+    ? numericValue
+    : null;
+}
+
+
+
+function normalizeDigits(
+  value: string
+): string {
+  const persianDigits =
+    "۰۱۲۳۴۵۶۷۸۹";
+
+  const arabicDigits =
+    "٠١٢٣٤٥٦٧٨٩";
+
+  return value
+    .replace(
+      /[۰-۹]/g,
+      (digit) =>
+        String(
+          persianDigits.indexOf(
+            digit
+          )
+        )
+    )
+    .replace(
+      /[٠-٩]/g,
+      (digit) =>
+        String(
+          arabicDigits.indexOf(
+            digit
+          )
+        )
+    );
+}
+
+// همان اندازه صفحهٔ جدول؛ بدون تکیه بر Pagination جایگزینِ Route.
+async function findApprovedForecastPage(
+  forecastId: string,
+  signal: AbortSignal
+): Promise<number | null> {
+  const seen = new Set<string>();
+  for (let page = 1; page <= 200; page += 1) {
+    const query = new URLSearchParams({
+      status: "Approved", 
+      pageNumber: String(page), 
+      pageSize: "10",
+    });
+    const response = await 
+    fetch(`/api/forecasts?${query.toString()}`, {
+      cache: "no-store", signal, 
+      headers: 
+      { Accept: "application/json" 
+        },
+    });
+    const data: unknown = 
+    parseJsonResponse
+    (await response.text());
+    if (!response.ok)
+       throw new Error(getErrorMessage(data) ??
+       "دریافت موضوعات برای پیدا کردن ردیف انجام نشد.");
+    if (!isRecord(data) || !Array.isArray(data.items)) 
+      throw new Error("ساختار فهرست موضوعات معتبر نیست.");
+    if (data.items.length === 0) 
+      return null;
+    let added = 0;
+    for (const item of data.items) {
+      if (!isRecord(item) || typeof item.id !== "string" || !item.id) throw new Error("شناسه یک موضوع معتبر نیست.");
+      if (item.id === forecastId) 
+        return page;
+      if (!seen.has(item.id)) added += 1;
+      seen.add(item.id);
+    }
+    if (!added) 
+      throw new Error("صفحه‌بندی سرویس تکراری است؛ ردیف اعلان پیدا نشد.");
+  }
+  throw new Error("جست‌وجوی ردیف از سقف ۲۰۰ صفحه بیشتر شد.");
+}

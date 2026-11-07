@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -24,142 +25,83 @@ import type {
 } from "@/app/types/program-profile";
 
 
-/*
- * مدت‌های پیشنهادی از ۱۰ تا ۲۴۰ دقیقه.
- * مقدار نهایی با فرمت TimeSpan برای Backend نگهداری می‌شود.
- */
-const PROGRAM_DURATION_OPTIONS =
-  Array.from(
-    {
-      length: 24,
-    },
-    (_, index) =>
-      formatDuration(
-        (index + 1) * 10
-      )
-  );
-
-
 interface ProfileSpecificationsStepProps {
-  /*
-   * اطلاعات مرحله اول از
-   * FormData مرکزی Dialog
-   */
-  data:
-    ProfileSpecificationsData;
+  data: ProfileSpecificationsData;
+  maxDurationMinutes: number;
 
-  /*
-   * به‌روزرسانی FormData مرکزی
-   */
   onChange: (
-    data:
-      ProfileSpecificationsData
+    data: ProfileSpecificationsData
   ) => void;
 
-  /*
-   * رفتن به مرحله عوامل
-   */
-  onNext:
-    () => void;
+  onNext: () => void;
 }
 
 
 export default function ProfileSpecificationsStep({
   data,
+  maxDurationMinutes,
   onChange,
   onNext,
 }: ProfileSpecificationsStepProps) {
+
   const [
     validationError,
     setValidationError,
   ] = useState("");
 
+  /*
+   * مقادیر موقت مدت برنامه
+   * مقدار اصلی data.duration برحسب دقیقه است.
+   */
   const [
-    isDurationOpen,
-    setIsDurationOpen,
-  ] = useState(false);
-
-  const durationPickerRef =
-    useRef<HTMLDivElement | null>(
-      null
-    );
-
-  const durationInputRef =
-    useRef<HTMLInputElement | null>(
-      null
-    );
+    durationHoursDraft,
+    setDurationHoursDraft,
+  ] = useState("0");
 
   const [
-    durationDraft,
-    setDurationDraft,
-  ] = useState(
-    data.duration
-  );
-
+    durationMinutesDraft,
+    setDurationMinutesDraft,
+  ] = useState("0");
+  
+  /*
+   * دریافت مدت اولیه از FormData مرکزی
+   */
   useEffect(() => {
+    const totalMinutes = Number(data.duration);
+
     if (
-      document.activeElement !==
-      durationInputRef.current
+      !Number.isInteger(totalMinutes) ||
+      totalMinutes < 0
     ) {
-      setDurationDraft(
-        data.duration
-      );
-    }
-  }, [data.duration]);
-
-  useEffect(() => {
-    if (!isDurationOpen) {
+      setDurationHoursDraft("0");
+      setDurationMinutesDraft("0");
       return;
     }
 
-    function closeDurationPicker(
-      event: MouseEvent
-    ) {
-      const target =
-        event.target as Node;
-
-      if (
-        !durationPickerRef.current
-          ?.contains(target)
-      ) {
-        setIsDurationOpen(false);
-      }
-    }
-
-    document.addEventListener(
-      "mousedown",
-      closeDurationPicker
+    setDurationHoursDraft(
+      String(Math.floor(totalMinutes / 60))
     );
 
-    return () => {
-      document.removeEventListener(
-        "mousedown",
-        closeDurationPicker
-      );
-    };
-  }, [isDurationOpen]);
+    setDurationMinutesDraft(
+      String(totalMinutes % 60)
+    );
+
+  }, [data.duration]);
 
 
   /*
-   * تغییر یک فیلد در اطلاعات
-   * مرحله اول
+   * تغییر یک فیلد در اطلاعات مرحله اول
    */
   function updateField<
-    Key extends
-      keyof ProfileSpecificationsData
+    Key extends keyof ProfileSpecificationsData
   >(
     fieldName: Key,
-
-    value:
-      ProfileSpecificationsData[Key]
+    value: ProfileSpecificationsData[Key]
   ) {
     onChange({
       ...data,
-
-      [fieldName]:
-        value,
+      [fieldName]: value,
     });
-
 
     if (validationError) {
       setValidationError("");
@@ -167,29 +109,297 @@ export default function ProfileSpecificationsStep({
   }
 
 
+  // /*
+  //  * تبدیل ساعت و دقیقه به دقیقه
+  //  * و ذخیره در فیلد duration
+  //  */
+  // function updateDuration(
+  //   hoursText: string,
+  //   minutesText: string
+  // ) {
+  //   setDurationHoursDraft(hoursText);
+  //   setDurationMinutesDraft(minutesText);
+
+  //   if (
+  //     hoursText === "" ||
+  //     minutesText === ""
+  //   ) {
+  //     return;
+  //   }
+
+  //   const hours = Number(hoursText);
+  //   const minutes = Number(minutesText);
+
+  //   if (
+  //     !Number.isInteger(hours) ||
+  //     !Number.isInteger(minutes) ||
+  //     hours < 0 ||
+  //     minutes < 0 ||
+  //     minutes > 59
+  //   ) {
+  //     return;
+  //   }
+
+  //   const totalMinutes =
+  //     hours * 60 + minutes;
+
+  //   updateField(
+  //     "duration",
+  //     String(totalMinutes)
+  //   );
+  // }
+
+
+  // /*
+  //  * نهایی کردن مقدار مدت هنگام خروج از ورودی
+  //  */
+  // function commitDuration() {
+  //   const hours =
+  //     durationHoursDraft === ""
+  //       ? 0
+  //       : Math.max(
+  //           0,
+  //           Math.floor(Number(durationHoursDraft))
+  //         );
+
+  //   const minutes =
+  //     durationMinutesDraft === ""
+  //       ? 0
+  //       : Math.min(
+  //           59,
+  //           Math.max(
+  //             0,
+  //             Math.floor(Number(durationMinutesDraft))
+  //           )
+  //         );
+
+  //   if (
+  //     !Number.isFinite(hours) ||
+  //     !Number.isFinite(minutes)
+  //   ) {
+  //     return;
+  //   }
+
+  //   setDurationHoursDraft(String(hours));
+  //   setDurationMinutesDraft(String(minutes));
+
+  //   updateField(
+  //     "duration",
+  //     String(hours * 60 + minutes)
+  //   );
+  // }
+
+  
+function restoreMaximumDuration() {
+  const safeMaximum = Math.max(
+    0,
+    Math.floor(maxDurationMinutes)
+  );
+
+  const hours = Math.floor(safeMaximum / 60);
+  const minutes = safeMaximum % 60;
+
+  setDurationHoursDraft(String(hours));
+  setDurationMinutesDraft(String(minutes));
+
+  onChange({
+    ...data,
+    duration: String(safeMaximum),
+  });
+
+  setValidationError(
+    "مدت برنامه نمی‌تواند از مدت طرح بیشتر باشد. مقدار به مدت اولیه طرح بازگردانده شد."
+  );
+}
+
+
+/*
+ * تبدیل ساعت و دقیقه به دقیقه
+ * و کنترل سقف مدت اولیه وب‌سرویس
+ */
+function updateDuration(
+  hoursText: string,
+  minutesText: string
+) {
+  setDurationHoursDraft(hoursText);
+  setDurationMinutesDraft(minutesText);
+
+  if (
+    hoursText === "" ||
+    minutesText === ""
+  ) {
+    return;
+  }
+
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return;
+  }
+
+  const totalMinutes = hours * 60 + minutes;
+
+  if (
+    maxDurationMinutes > 0 &&
+    totalMinutes > maxDurationMinutes
+  ) {
+    restoreMaximumDuration();
+    return;
+  }
+
+  onChange({
+    ...data,
+    duration: String(totalMinutes),
+  });
+
+  setValidationError("");
+}
+
+
+/*
+ * نهایی کردن مدت هنگام خروج از ورودی
+ */
+function commitDuration() {
+  const hours =
+    durationHoursDraft === ""
+      ? 0
+      : Number(durationHoursDraft);
+
+  const minutes =
+    durationMinutesDraft === ""
+      ? 0
+      : Number(durationMinutesDraft);
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    minutes < 0
+  ) {
+    restoreMaximumDuration();
+    return;
+  }
+
+  const normalizedMinutes = Math.min(minutes, 59);
+  const totalMinutes =
+    hours * 60 + normalizedMinutes;
+
+  if (
+    maxDurationMinutes > 0 &&
+    totalMinutes > maxDurationMinutes
+  ) {
+    restoreMaximumDuration();
+    return;
+  }
+
+  setDurationHoursDraft(String(hours));
+  setDurationMinutesDraft(String(normalizedMinutes));
+
+  onChange({
+    ...data,
+    duration: String(totalMinutes),
+  });
+}
+
+
   /*
    * اعتبارسنجی مرحله اول
    */
-  function handleNext() {
-    const validationMessage =
-      validateSpecifications(
-        data
-      );
+  
+function handleNext() {
+  const hours =
+    durationHoursDraft === ""
+      ? 0
+      : Number(durationHoursDraft);
 
+  const minutes =
+    durationMinutesDraft === ""
+      ? 0
+      : Number(durationMinutesDraft);
 
-    if (validationMessage) {
-      setValidationError(
-        validationMessage
-      );
-
-      return;
-    }
-
-
-    setValidationError("");
-
-    onNext();
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    setValidationError(
+      "مدت برنامه را به‌درستی وارد کنید."
+    );
+    return;
   }
+
+  const totalMinutes = hours * 60 + minutes;
+
+  if (
+    maxDurationMinutes > 0 &&
+    totalMinutes > maxDurationMinutes
+  ) {
+    restoreMaximumDuration();
+    return;
+  }
+
+  const startTimeParts = getClockParts(data.startTime);
+  const isStartTimeEmpty =
+    startTimeParts.hours === 0 &&
+    startTimeParts.minutes === 0;
+
+  if (totalMinutes <= 0 || isStartTimeEmpty) {
+    setValidationError(
+      "مدت برنامه یا ساعت وارد نشده است."
+    );
+    return;
+  }
+
+  const nextData = {
+    ...data,
+    duration: String(totalMinutes),
+  };
+
+  const validationMessage =
+    validateSpecifications(nextData);
+
+  if (validationMessage) {
+    setValidationError(validationMessage);
+    return;
+  }
+
+  setDurationHoursDraft(String(hours));
+  setDurationMinutesDraft(String(minutes));
+  setValidationError("");
+
+  onChange(nextData);
+  onNext();
+}
+
+
+
+  /*
+   * نمایش مدت به شکل ساعت و دقیقه
+   */
+  const previewHours =
+    durationHoursDraft === ""
+      ? 0
+      : Math.max(
+          0,
+          Number(durationHoursDraft) || 0
+        );
+
+  const previewMinutes =
+    durationMinutesDraft === ""
+      ? 0
+      : Math.max(
+          0,
+          Number(durationMinutesDraft) || 0
+        );
 
 
   return (
@@ -203,6 +413,7 @@ export default function ProfileSpecificationsStep({
       "
       dir="rtl"
     >
+
       {/* عنوان مرحله */}
       <header
         className="
@@ -230,11 +441,8 @@ export default function ProfileSpecificationsStep({
               text-[#007fcf]
             "
           >
-            <CheckCircle2
-              size={23}
-            />
+            <CheckCircle2 size={23} />
           </div>
-
 
           <div>
             <h2
@@ -273,7 +481,6 @@ export default function ProfileSpecificationsStep({
           اطلاعات برنامه
         </h3>
 
-
         <div
           className="
             grid
@@ -286,86 +493,55 @@ export default function ProfileSpecificationsStep({
         >
           <ReadOnlyField
             label="نام برنامه"
-            value={
-              data.programName
-            }
+            value={data.programName}
           />
-
 
           <ReadOnlyField
             label="موضوع برنامه"
-            value={
-              data.mainTopic
-            }
+            value={data.mainTopic}
           />
-
 
           <ReadOnlyField
             label="شماره قسمت"
             value={
-              data.episodeNumber !==
-              null
-                ? toPersianNumber(
-                    data.episodeNumber
-                  )
+              data.episodeNumber !== null
+                ? toPersianNumber(data.episodeNumber)
                 : "—"
             }
           />
-
 
           <ReadOnlyField
             label="تاریخ پخش"
             value={
               data.broadcastDateJalali ||
-              formatJalaliDate(
-                data.broadcastDate
-              )
+              formatJalaliDate(data.broadcastDate)
             }
-            icon={
-              <CalendarDays
-                size={17}
-              />
-            }
+            icon={<CalendarDays size={17} />}
           />
-
 
           <ReadOnlyField
             label="نحوه تولید"
-            value={
-              data.productionMethod
-            }
+            value={data.productionMethod}
           />
-
 
           <ReadOnlyField
             label="مناسبت"
-            value={
-              data.occasion
-            }
+            value={data.occasion}
           />
-
 
           <ReadOnlyField
             label="طبقه برنامه"
-            value={
-              data.floorName
-            }
+            value={data.floorName}
           />
-
 
           <ReadOnlyField
             label="درجه برنامه"
-            value={
-              data.programDegreeName
-            }
+            value={data.programDegreeName}
           />
-
 
           <ReadOnlyField
             label="ساختار برنامه"
-            value={
-              data.programStructureName
-            }
+            value={data.programStructureName}
           />
         </div>
       </div>
@@ -390,7 +566,6 @@ export default function ProfileSpecificationsStep({
           اطلاعات قابل تکمیل
         </h3>
 
-
         <div
           className="
             grid
@@ -399,8 +574,9 @@ export default function ProfileSpecificationsStep({
             md:grid-cols-2
           "
         >
+
           {/* مدت برنامه */}
-          <div className="block">
+          <div>
             <span
               className="
                 mb-2
@@ -412,212 +588,177 @@ export default function ProfileSpecificationsStep({
             >
               مدت برنامه
 
-              <span
-                className="
-                  mr-1
-                  text-red-500
-                "
-              >
+              <span className="mr-1 text-red-500">
                 *
               </span>
             </span>
 
-
             <div
-              ref={durationPickerRef}
-              className="relative"
+              className="
+                flex
+                h-11
+                items-center
+                gap-3
+                rounded-lg
+                border border-gray-300
+                bg-white
+                px-3
+                transition
+                focus-within:border-[#007fcf]
+                focus-within:ring-2
+                focus-within:ring-[#007fcf]/10
+              "
+              dir="ltr"
             >
               <Clock3
                 size={18}
-                className="
-                  pointer-events-none
-                  absolute
-                  right-3
-                  top-[22px]
-                  -translate-y-1/2
-                  text-gray-400
-                "
+                className="shrink-0 text-gray-400"
               />
 
-              <input
-                ref={durationInputRef}
-                type="text"
-                inputMode="text"
-                value={durationDraft}
-                maxLength={8}
-                placeholder="01:30:00"
-                onFocus={(event) =>
-                  event.currentTarget.select()
-                }
-                onChange={(event) => {
-                  const nextValue =
-                    normalizeEditableTime(
-                      event.target.value
-                    );
+              <div className="flex flex-1 items-center justify-center gap-2">
 
-                  setDurationDraft(
-                    nextValue
-                  );
+                {/* ساعت */}
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={durationHoursDraft}
+                  onChange={(event) => {
+                    const value =
+                      event.target.value;
 
-                  updateField(
-                    "duration",
-                    nextValue
-                  );
-                }}
-                onBlur={() => {
-                  const normalized =
-                    normalizeDurationDraft(
-                      durationDraft
-                    );
-
-                  setDurationDraft(
-                    normalized
-                  );
-
-                  updateField(
-                    "duration",
-                    normalized
-                  );
-                }}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter"
-                  ) {
-                    event.currentTarget.blur();
-                  }
-                }}
-                dir="ltr"
-                className="
-                  h-11
-                  w-full
-                  rounded-lg
-                  border border-gray-300
-                  bg-white
-                  pl-11 pr-10
-                  text-center
-                  font-semibold
-                  outline-none
-                  transition
-                  focus:border-[#007fcf]
-                  focus:ring-2
-                  focus:ring-[#007fcf]/10
-                "
-              />
-
-              <button
-                type="button"
-                onMouseDown={(event) =>
-                  event.preventDefault()
-                }
-                onClick={() =>
-                  setIsDurationOpen(
-                    (previous) =>
-                      !previous
-                  )
-                }
-                aria-label="نمایش مدت‌های پیشنهادی"
-                aria-haspopup="listbox"
-                aria-expanded={isDurationOpen}
-                className="
-                  absolute
-                  left-1.5 top-1.5
-                  flex h-8 w-8
-                  items-center
-                  justify-center
-                  rounded-md
-                  text-gray-400
-                  transition
-                  hover:bg-gray-100
-                  hover:text-[#007fcf]
-                "
-              >
-                <ChevronDown
-                  size={18}
-                  className={`
-                    text-gray-400
-                    transition-transform
-                    ${
-                      isDurationOpen
-                        ? "rotate-180"
-                        : ""
+                    if (
+                      value !== "" &&
+                      (
+                        !/^\d+$/.test(value) ||
+                        Number(value) > 999
+                      )
+                    ) {
+                      return;
                     }
-                  `}
+
+                    updateDuration(
+                      value,
+                      durationMinutesDraft
+                    );
+                  }}
+                  onBlur={commitDuration}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  aria-label="ساعت مدت برنامه"
+                  className="
+                    h-9
+                    w-16
+                    rounded-md
+                    border border-gray-200
+                    bg-gray-50
+                    text-center
+                    font-bold
+                    text-gray-800
+                    outline-none
+                    focus:border-[#007fcf]
+                  "
                 />
 
-              </button>
-
-              {isDurationOpen && (
-                <div
-                  role="listbox"
+                <span
                   className="
-                    absolute
-                    left-0 right-0
-                    top-full
-                    z-40
-                    mt-2
-                    max-h-40
-                    overflow-y-auto
-                    rounded-lg
-                    border border-gray-200
-                    bg-white
-                    p-1.5
-                    shadow-xl
+                    text-xs
+                    text-gray-500
                   "
                 >
-                  {PROGRAM_DURATION_OPTIONS.map(
-                    (duration) => (
-                      <button
-                        key={duration}
-                        type="button"
-                        role="option"
-                        aria-selected={
-                          data.duration ===
-                          duration
-                        }
-                        onClick={() => {
-                          updateField(
-                            "duration",
-                            duration
-                          );
+                  ساعت
+                </span>
 
-                          setDurationDraft(
-                            duration
-                          );
 
-                          setIsDurationOpen(
-                            false
-                          );
-                        }}
-                        dir="ltr"
-                        className={`
-                          block
-                          w-full
-                          rounded-md
-                          px-3 py-2
-                          text-center
-                          text-sm
-                          transition
-                          ${
-                            data.duration ===
-                            duration
-                              ? "bg-blue-50 font-bold text-[#007fcf]"
-                              : "text-gray-700 hover:bg-gray-100"
-                          }
-                        `}
-                      >
-                        {duration}
-                      </button>
-                    )
-                  )}
-                </div>
-              )}
+                <span className="font-bold text-gray-400">
+                  :
+                </span>
+
+
+                {/* دقیقه */}
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  inputMode="numeric"
+                  value={durationMinutesDraft}
+                  onChange={(event) => {
+                    const value =
+                      event.target.value;
+
+                    if (
+                      value !== "" &&
+                      (
+                        !/^\d+$/.test(value) ||
+                        Number(value) > 59
+                      )
+                    ) {
+                      return;
+                    }
+
+                    updateDuration(
+                      durationHoursDraft,
+                      value
+                    );
+                  }}
+                  onBlur={commitDuration}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  aria-label="دقیقه مدت برنامه"
+                  className="
+                    h-9
+                    w-16
+                    rounded-md
+                    border border-gray-200
+                    bg-gray-50
+                    text-center
+                    font-bold
+                    text-gray-800
+                    outline-none
+                    focus:border-[#007fcf]
+                  "
+                />
+
+                <span
+                  className="
+                    text-xs
+                    text-gray-500
+                  "
+                >
+                  دقیقه
+                </span>
+
+              </div>
             </div>
 
+            <p
+              className="
+                mt-2
+                text-xs
+                text-gray-500
+              "
+            >
+              مدت برنامه:{" "}
+              <span className="font-semibold text-[#007fcf]">
+                {toPersianNumber(previewHours)}
+                {" ساعت و "}
+                {toPersianNumber(previewMinutes)}
+                {" دقیقه"}
+              </span>
+            </p>
           </div>
 
 
           {/* ساعت شروع */}
-          <div className="block">
+          <div>
             <span
               className="
                 mb-2
@@ -629,20 +770,15 @@ export default function ProfileSpecificationsStep({
             >
               ساعت شروع
 
-              <span
-                className="
-                  mr-1
-                  text-red-500
-                "
-              >
+              <span className="mr-1 text-red-500">
                 *
               </span>
             </span>
 
-
             <div
               className="
-                flex h-11
+                flex
+                h-11
                 items-center
                 justify-center
                 gap-2
@@ -669,9 +805,7 @@ export default function ProfileSpecificationsStep({
               <TimePartInput
                 label="ساعت"
                 value={
-                  getClockParts(
-                    data.startTime
-                  ).hours
+                  getClockParts(data.startTime).hours
                 }
                 max={23}
                 onChange={(hours) =>
@@ -679,9 +813,7 @@ export default function ProfileSpecificationsStep({
                     "startTime",
                     buildClockTime(
                       hours,
-                      getClockParts(
-                        data.startTime
-                      ).minutes
+                      getClockParts(data.startTime).minutes
                     )
                   )
                 }
@@ -698,26 +830,22 @@ export default function ProfileSpecificationsStep({
               <TimePartInput
                 label="دقیقه"
                 value={
-                  getClockParts(
-                    data.startTime
-                  ).minutes
+                  getClockParts(data.startTime).minutes
                 }
                 max={59}
                 onChange={(minutes) =>
                   updateField(
                     "startTime",
                     buildClockTime(
-                      getClockParts(
-                        data.startTime
-                      ).hours,
+                      getClockParts(data.startTime).hours,
                       minutes
                     )
                   )
                 }
               />
             </div>
-
           </div>
+
         </div>
 
 
@@ -740,9 +868,7 @@ export default function ProfileSpecificationsStep({
           >
             <input
               type="checkbox"
-              checked={
-                data.hasExpert
-              }
+              checked={data.hasExpert}
               disabled
               className="
                 mt-1
@@ -750,7 +876,6 @@ export default function ProfileSpecificationsStep({
                 accent-[#007fcf]
               "
             />
-
 
             <span>
               <span
@@ -811,9 +936,7 @@ export default function ProfileSpecificationsStep({
       >
         <button
           type="button"
-          onClick={
-            handleNext
-          }
+          onClick={handleNext}
           className="
             inline-flex
             items-center
@@ -833,11 +956,10 @@ export default function ProfileSpecificationsStep({
         >
           مرحله بعد
 
-          <ArrowLeft
-            size={18}
-          />
+          <ArrowLeft size={18} />
         </button>
       </footer>
+
     </section>
   );
 }
@@ -847,14 +969,11 @@ export default function ProfileSpecificationsStep({
  * فیلد فقط نمایشی
  */
 interface ReadOnlyFieldProps {
-  label:
-    string;
+  label: string;
 
-  value:
-    string | number | null;
+  value: string | number | null;
 
-  icon?:
-  ReactNode;
+  icon?: ReactNode;
 }
 
 
@@ -869,7 +988,6 @@ function ReadOnlyField({
     value === ""
       ? "—"
       : String(value);
-
 
   return (
     <div>
@@ -886,11 +1004,8 @@ function ReadOnlyField({
       >
         {icon}
 
-        <span>
-          {label}
-        </span>
+        <span>{label}</span>
       </div>
-
 
       <div
         className="
@@ -912,14 +1027,11 @@ function ReadOnlyField({
 
 
 interface TimePartInputProps {
-  label:
-    string;
+  label: string;
 
-  value:
-    number;
+  value: number;
 
-  max:
-    number;
+  max: number;
 
   onChange: (
     value: number
@@ -937,19 +1049,15 @@ function TimePartInput({
   max,
   onChange,
 }: TimePartInputProps) {
+
   const inputRef =
-    useRef<HTMLInputElement | null>(
-      null
-    );
+    useRef<HTMLInputElement | null>(null);
 
   const [
     draftValue,
     setDraftValue,
   ] = useState(
-    String(value).padStart(
-      2,
-      "0"
-    )
+    String(value).padStart(2, "0")
   );
 
   useEffect(() => {
@@ -958,19 +1066,16 @@ function TimePartInput({
       inputRef.current
     ) {
       setDraftValue(
-        String(value).padStart(
-          2,
-          "0"
-        )
+        String(value).padStart(2, "0")
       );
     }
   }, [value]);
 
+
   function commitDraftValue() {
     const normalized =
-      normalizeDigits(
-        draftValue
-      ).replace(/\D/g, "");
+      normalizeDigits(draftValue)
+        .replace(/\D/g, "");
 
     const nextValue =
       normalized
@@ -981,14 +1086,12 @@ function TimePartInput({
         : 0;
 
     setDraftValue(
-      String(nextValue).padStart(
-        2,
-        "0"
-      )
+      String(nextValue).padStart(2, "0")
     );
 
     onChange(nextValue);
   }
+
 
   function increaseValue() {
     const nextValue =
@@ -997,14 +1100,12 @@ function TimePartInput({
         : value + 1;
 
     setDraftValue(
-      String(nextValue).padStart(
-        2,
-        "0"
-      )
+      String(nextValue).padStart(2, "0")
     );
 
     onChange(nextValue);
   }
+
 
   function decreaseValue() {
     const nextValue =
@@ -1013,30 +1114,25 @@ function TimePartInput({
         : value - 1;
 
     setDraftValue(
-      String(nextValue).padStart(
-        2,
-        "0"
-      )
+      String(nextValue).padStart(2, "0")
     );
 
     onChange(nextValue);
   }
 
+
   function handleManualChange(
     inputValue: string
   ) {
     const normalizedValue =
-      normalizeDigits(
-        inputValue
-      ).replace(/\D/g, "");
+      normalizeDigits(inputValue)
+        .replace(/\D/g, "");
 
     setDraftValue(
-      normalizedValue.slice(
-        0,
-        2
-      )
+      normalizedValue.slice(0, 2)
     );
   }
+
 
   return (
     <div className="text-center">
@@ -1144,6 +1240,9 @@ function TimePartInput({
 }
 
 
+/*
+ * استخراج ساعت و دقیقه از ساعت شروع
+ */
 function getClockParts(
   value: string
 ): {
@@ -1153,127 +1252,38 @@ function getClockParts(
   const [
     hoursText = "0",
     minutesText = "0",
-  ] = normalizeDigits(value).split(
-    ":"
-  );
+  ] = normalizeDigits(value).split(":");
 
-  const hours =
-    Number(hoursText);
-
-  const minutes =
-    Number(minutesText);
+  const hours = Number(hoursText);
+  const minutes = Number(minutesText);
 
   return {
     hours:
       Number.isFinite(hours)
-        ? Math.min(
-            Math.max(hours, 0),
-            23
-          )
+        ? Math.min(Math.max(hours, 0), 23)
         : 0,
 
     minutes:
       Number.isFinite(minutes)
-        ? Math.min(
-            Math.max(minutes, 0),
-            59
-          )
+        ? Math.min(Math.max(minutes, 0), 59)
         : 0,
   };
 }
 
 
+/*
+ * ساخت ساعت شروع با فرمت hh:mm:ss
+ */
 function buildClockTime(
   hours: number,
   minutes: number
 ): string {
   return (
-    String(hours).padStart(
-      2,
-      "0"
-    ) +
+    String(hours).padStart(2, "0") +
     ":" +
-    String(minutes).padStart(
-      2,
-      "0"
-    ) +
+    String(minutes).padStart(2, "0") +
     ":00"
   );
-}
-
-
-/*
- * هنگام تایپ، فقط رقم و علامت دونقطه
- * نگهداری می‌شود و ارقام فارسی نیز پذیرفته می‌شوند.
- */
-function normalizeEditableTime(
-  value: string
-): string {
-  return normalizeDigits(value)
-    .replace(/[^\d:]/g, "")
-    .slice(0, 8);
-}
-
-
-/*
- * مقدار دستی مدت را برای Backend
- * به فرمت hh:mm:ss تبدیل می‌کند.
- */
-function normalizeDurationDraft(
-  value: string
-): string {
-  const normalized =
-    normalizeEditableTime(
-      value.trim()
-    );
-
-  if (!normalized) {
-    return "";
-  }
-
-  if (/^\d{6}$/.test(normalized)) {
-    return (
-      normalized.slice(0, 2) +
-      ":" +
-      normalized.slice(2, 4) +
-      ":" +
-      normalized.slice(4, 6)
-    );
-  }
-
-  const parts =
-    normalized.split(":");
-
-  if (
-    parts.length === 2 &&
-    parts.every((part) =>
-      /^\d{1,2}$/.test(part)
-    )
-  ) {
-    return (
-      parts[0].padStart(2, "0") +
-      ":" +
-      parts[1].padStart(2, "0") +
-      ":00"
-    );
-  }
-
-  if (
-    parts.length === 3 &&
-    parts.every((part) =>
-      /^\d{1,2}$/.test(part)
-    )
-  ) {
-    return (
-      parts[0].padStart(2, "0") +
-      ":" +
-      parts[1].padStart(2, "0") +
-      ":" +
-      parts[2].padStart(2, "0")
-    );
-  }
-
-  return normalized;
 }
 
 
@@ -1281,18 +1291,16 @@ function normalizeDurationDraft(
  * اعتبارسنجی مرحله اول
  */
 function validateSpecifications(
-  data:
-    ProfileSpecificationsData
+  data: ProfileSpecificationsData
 ): string | null {
+
   if (!data.forecastId.trim()) {
     return "شناسه پیش‌بینی دریافت نشده است.";
   }
 
 
   if (
-    !Number.isInteger(
-      data.planId
-    ) ||
+    !Number.isInteger(data.planId) ||
     data.planId <= 0
   ) {
     return "شناسه برنامه معتبر نیست.";
@@ -1300,21 +1308,20 @@ function validateSpecifications(
 
 
   if (
-    !Number.isInteger(
-      data.networkId
-    ) ||
+    !Number.isInteger(data.networkId) ||
     data.networkId <= 0
   ) {
     return "شناسه شبکه معتبر نیست.";
   }
 
-if (
-  data.networkGroupId === null ||
-  !Number.isInteger(data.networkGroupId) ||
-  data.networkGroupId <= 0
-) {
-  return "شناسه گروه برنامه‌ساز معتبر نیست.";
-}
+
+  if (
+    data.networkGroupId === null ||
+    !Number.isInteger(data.networkGroupId) ||
+    data.networkGroupId <= 0
+  ) {
+    return "شناسه گروه برنامه‌ساز معتبر نیست.";
+  }
 
 
   if (!data.mainTopic.trim()) {
@@ -1330,9 +1337,7 @@ if (
   if (
     Number.isNaN(
       Date.parse(
-        normalizeDigits(
-          data.broadcastDate
-        )
+        normalizeDigits(data.broadcastDate)
       )
     )
   ) {
@@ -1340,22 +1345,26 @@ if (
   }
 
 
+  /*
+   * مدت برنامه برحسب دقیقه است.
+   */
+  const durationMinutes =
+    Number(data.duration);
+
   if (
-    !isTimeSpan(
-      normalizeDigits(
-        data.duration
-      )
-    )
+    !Number.isInteger(durationMinutes) ||
+    durationMinutes <= 0
   ) {
-    return "مدت برنامه باید با فرمت hh:mm:ss وارد شود.";
+    return "مدت برنامه باید بیشتر از صفر دقیقه باشد.";
   }
 
 
+  /*
+   * ساعت شروع همچنان با فرمت hh:mm:ss است.
+   */
   if (
     !isClockTime(
-      normalizeDigits(
-        data.startTime
-      )
+      normalizeDigits(data.startTime)
     )
   ) {
     return "ساعت شروع باید با فرمت hh:mm:ss وارد شود.";
@@ -1374,9 +1383,7 @@ if (
 
   if (
     data.floorId === null ||
-    !Number.isInteger(
-      data.floorId
-    ) ||
+    !Number.isInteger(data.floorId) ||
     data.floorId <= 0
   ) {
     return "طبقه برنامه معتبر نیست.";
@@ -1389,92 +1396,34 @@ if (
 
 
   if (
-    data.programDegreeId ===
-      null ||
-    !Number.isInteger(
-      data.programDegreeId
-    ) ||
+    data.programDegreeId === null ||
+    !Number.isInteger(data.programDegreeId) ||
     data.programDegreeId <= 0
   ) {
     return "درجه برنامه معتبر نیست.";
   }
 
 
-  if (
-    !data.programDegreeName
-      .trim()
-  ) {
+  if (!data.programDegreeName.trim()) {
     return "نام درجه برنامه دریافت نشده است.";
   }
 
 
   if (
-    data.programStructureId ===
-      null ||
-    !Number.isInteger(
-      data.programStructureId
-    ) ||
+    data.programStructureId === null ||
+    !Number.isInteger(data.programStructureId) ||
     data.programStructureId <= 0
   ) {
     return "ساختار برنامه معتبر نیست.";
   }
 
 
-  if (
-    !data.programStructureName
-      .trim()
-  ) {
+  if (!data.programStructureName.trim()) {
     return "نام ساختار برنامه دریافت نشده است.";
   }
 
 
   return null;
-}
-
-
-/*
- * تبدیل تعداد دقیقه به TimeSpan.
- * مثال: ۹۰ دقیقه => 01:30:00
- */
-function formatDuration(
-  totalMinutes: number
-): string {
-  const hours =
-    Math.floor(
-      totalMinutes / 60
-    );
-
-  const minutes =
-    totalMinutes % 60;
-
-  return (
-    String(hours).padStart(
-      2,
-      "0"
-    ) +
-    ":" +
-    String(minutes).padStart(
-      2,
-      "0"
-    ) +
-    ":00"
-  );
-}
-
-
-/*
- * TimeSpan
- *
- * مثال:
- * 01:30:00
- */
-function isTimeSpan(
-  value: string
-): boolean {
-  return (
-    /^\d{2,}:[0-5]\d:[0-5]\d$/
-      .test(value)
-  );
 }
 
 
@@ -1493,52 +1442,60 @@ function isClockTime(
   );
 }
 
-
 /*
  * تبدیل تاریخ میلادی Backend
- * به تاریخ شمسی
+ * به تاریخ شمسی بدون جابه‌جایی روز
  */
 function formatJalaliDate(
   value: string
 ): string {
-  if (!value) {
-    return "—";
-  }
-
-
-  const normalizedValue =
-    normalizeDigits(value);
-
-
-  const date =
-    new Date(
-      normalizedValue
-    );
-
-
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    typeof value !== "string" ||
+    !value.trim()
   ) {
     return "—";
   }
 
+  const normalizedValue =
+    normalizeDigits(value.trim());
+
+  const dateMatch =
+    normalizedValue.match(
+      /^(\d{4})-(\d{1,2})-(\d{1,2})/
+    );
+
+  if (!dateMatch) {
+    return "—";
+  }
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+
+  // اعتبارسنجی اجزای تاریخ
+  const date = new Date(
+    Date.UTC(year, month - 1, day, 12)
+  );
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return "—";
+  }
 
   return new Intl.DateTimeFormat(
     "fa-IR-u-ca-persian",
     {
-      year:
-        "numeric",
-
-      month:
-        "2-digit",
-
-      day:
-        "2-digit",
-
-      timeZone:
-        "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "UTC",
     }
   ).format(date);
 }
@@ -1573,24 +1530,19 @@ function normalizeDigits(
   const arabicDigits =
     "٠١٢٣٤٥٦٧٨٩";
 
-
   return value
     .replace(
       /[۰-۹]/g,
       (digit) =>
         String(
-          persianDigits.indexOf(
-            digit
-          )
+          persianDigits.indexOf(digit)
         )
     )
     .replace(
       /[٠-٩]/g,
       (digit) =>
         String(
-          arabicDigits.indexOf(
-            digit
-          )
+          arabicDigits.indexOf(digit)
         )
     );
 }

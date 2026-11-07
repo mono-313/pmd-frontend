@@ -29,7 +29,9 @@ import type {
   ProgramProfileStatus,
 } from "@/app/types/program-profile";
 
-
+import ProgramName from "@/app/component/program/ProgramName";
+import NetworkName from "@/app/component/network/NetworkName";
+import NetworkGroupName from "@/app/component/network/NetworkGroupName";
 export default function ProgramProfileDetailsPage() {
   const router =
     useRouter();
@@ -565,11 +567,18 @@ export default function ProgramProfileDetailsPage() {
           <SpecificationsTable
             items={[
               {
-                label: "نام برنامه",
-                value: getProgramName(
-                  profile
-                ),
-              },
+  label: "نام برنامه",
+  value: (
+    <ProgramName
+      planId={profile.planId}
+      networkId={readRecordNumber(
+        profile,
+        "networkId"
+      )}
+      fallback={getProgramName(profile)}
+    />
+  ),
+},
               {
                 label: "موضوع اصلی",
                 value: displayText(
@@ -676,7 +685,7 @@ export default function ProgramProfileDetailsPage() {
                 "ردیف",
                 "نام عامل",
                 "نوع فعالیت",
-                "وضعیت حضور",
+                // "وضعیت حضور",
               ]}
             >
               {profile.crewMembers.map(
@@ -706,11 +715,11 @@ export default function ProgramProfileDetailsPage() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    {/* <TableCell>
                       {member.isPresent
                         ? "حاضر"
                         : "غایب"}
-                    </TableCell>
+                    </TableCell> */}
                   </tr>
                 )
               )}
@@ -735,7 +744,7 @@ export default function ProgramProfileDetailsPage() {
               headers={[
                 "ردیف",
                 "عنوان آیتم",
-                "نوع تولید",
+                // "نوع تولید",
                 "مدت",
               ]}
             >
@@ -760,15 +769,16 @@ export default function ProgramProfileDetailsPage() {
                       )}
                     </TableCell>
 
-                    <TableCell>
+                    {/* <TableCell>
                       {displayText(
                         item.productionType
                       )}
-                    </TableCell>
+                    </TableCell> */}
 
                     <TableCell
                       ltr
-                      align="center"
+                      align="right"
+                      
                     >
                       {formatTime(
                         item.duration
@@ -2638,7 +2648,6 @@ function getAttendanceTitle(
   }
 }
 
-
 function formatPersianDate(
   value: unknown
 ): string {
@@ -2649,31 +2658,49 @@ function formatPersianDate(
     return "—";
   }
 
+  const normalizedValue =
+    normalizeDigits(value.trim());
+
+  // استخراج مستقیم تاریخ از ابتدای رشته
+  const dateMatch =
+    normalizedValue.match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+  if (!dateMatch) {
+    return value;
+  }
+
+  const [, year, month, day] =
+    dateMatch;
+
   const date =
     new Date(
-      normalizeDigits(
-        value
+      Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        12,
+        0,
+        0
       )
     );
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
 
   return new Intl.DateTimeFormat(
-    "fa-IR",
+    "fa-IR-u-ca-persian",
     {
+      calendar: "persian",
+      timeZone: "UTC",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }
   ).format(date);
 }
-
 
 function formatPersianDateTime(
   value: unknown
@@ -2685,23 +2712,18 @@ function formatPersianDateTime(
     return "—";
   }
 
-  const date =
-    new Date(
-      normalizeDigits(
-        value
-      )
-    );
+  const normalizedValue =
+    normalizeDigits(value.trim());
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  const date =
+    new Date(normalizedValue);
+
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
 
   return new Intl.DateTimeFormat(
-    "fa-IR",
+    "fa-IR-u-ca-persian",
     {
       year: "numeric",
       month: "2-digit",
@@ -2711,7 +2733,6 @@ function formatPersianDateTime(
     }
   ).format(date);
 }
-
 
 function formatTime(
   value: unknown

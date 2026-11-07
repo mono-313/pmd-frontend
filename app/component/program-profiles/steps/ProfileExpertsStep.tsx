@@ -47,6 +47,7 @@ interface ProfileExpertsStepProps {
   availableExperts: ProfileExpertOption[];
   topicAxes: ProfileTopicAxisOption[];
   isExpertsLoading?: boolean;
+  programDurationMinutes: number;
   expertsError?: string;
   onChange: (
     experts: ProfileExpertData[]
@@ -70,6 +71,7 @@ export default function ProfileExpertsStep({
   experts,
   availableExperts,
   topicAxes,
+  programDurationMinutes,
   isExpertsLoading = false,
   expertsError = "",
   onChange,
@@ -286,6 +288,30 @@ export default function ProfileExpertsStep({
             )
           )
       );
+
+      const totalExpertDurationSeconds =
+  experts.reduce(
+    (total, expert) =>
+      total +
+      timeSpanToSeconds(
+        normalizeDigits(expert.duration)
+      ),
+    0
+  );
+
+const programDurationSeconds =
+  programDurationMinutes * 60;
+
+if (
+  totalExpertDurationSeconds >
+  programDurationSeconds
+) {
+  setValidationError(
+    "مدت حضور کارشناسان نمی‌تواند از مدت زمان برنامه بیشتر باشد."
+  );
+  return;
+}
+
 
     if (incompleteExpert) {
       setValidationError(
@@ -875,6 +901,17 @@ function isTimeSpan(
   return /^\d{2,}:[0-5]\d:[0-5]\d$/.test(value);
 }
 
+function timeSpanToSeconds(value: string): number {
+  const [hours, minutes, seconds] = value
+    .split(":")
+    .map(Number);
+
+  return (
+    hours * 3600 +
+    minutes * 60 +
+    seconds
+  );
+}
 
 function toPersianNumber(
   value: string | number

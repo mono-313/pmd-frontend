@@ -13,6 +13,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "نام کاربری و رمز عبور را وارد کنید." }, { status: 400 });
     const response = await backendAuth(API_CONFIG.endpoints.login, { userName: input.userName, password: input.password });
     const data = await response.json().catch(() => null);
+    console.log("LOGIN BACKEND RESPONSE:", data);
     if (!response.ok) {
       const message = response.status === 401 ? "نام کاربری یا رمز عبور صحیح نیست."
         : response.status === 403 ? "حساب کاربری شما غیرفعال است."

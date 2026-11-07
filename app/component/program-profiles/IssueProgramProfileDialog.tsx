@@ -195,6 +195,10 @@ export default function IssueProfileDialog({
     setExpertsError,
   ] = useState("");
 
+  const [
+  maxDurationMinutes,
+  setMaxDurationMinutes,
+] = useState(0);
 
   /*
    * جلوگیری از Scroll صفحه زیر Modal
@@ -244,6 +248,9 @@ export default function IssueProfileDialog({
     false;
 
   async function loadWizardData() {
+    setWizardData(emptyWizardData);
+    setMaxDurationMinutes(0);
+
     try {
       setIsLoading(true);
       setLoadingError("");
@@ -356,6 +363,7 @@ export default function IssueProfileDialog({
             fetchJson(
               `/api/base-info/plans/${planId}/detail`
             ),
+            
 
             fetchJson(
               `/api/base-info/plans/${planId}/crew`
@@ -378,7 +386,9 @@ export default function IssueProfileDialog({
               )}`
             ),
           ]);
+          
 
+          
 
         /*
          * پاسخ estimateDetail ابتدا باز می‌شود تا jobId
@@ -928,18 +938,20 @@ const resolvedProgramTypeName =
         ]
       ),
 
-    duration:
-      normalizeTimeSpan(
-        getString(
-          planDetail,
-          [
-            "duration",
-            "Duration",
-            "programDuration",
-            "ProgramDuration",
-          ]
-        )
-      ),
+    
+duration:
+  String(
+    getNumber(
+      planDetail,
+      [
+        "Duration",
+        "duration",
+        "ProgramDuration",
+        "programDuration",
+      ]
+    ) ?? 0
+  ),
+
 
     broadcastDate,
 
@@ -1020,6 +1032,17 @@ programStructureName:
   experts: initialExperts,
 };
 
+const initialDurationMinutes =
+  getNumber(
+    planDetail,
+    [
+      "Duration",
+      "duration",
+      "ProgramDuration",
+      "programDuration",
+    ]
+  ) ?? 0;
+
         if (!cancelled) {
           setWizardData(
             nextWizardData
@@ -1046,6 +1069,8 @@ programStructureName:
           setTopicAxes(
             normalizedAxes
           );
+
+          setMaxDurationMinutes(initialDurationMinutes);
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -1256,6 +1281,7 @@ programStructureName:
               {currentStep === 1 && (
                 <ProfileSpecificationsStep
                             data={wizardData.specifications}
+                            maxDurationMinutes={maxDurationMinutes}
                             onChange={(specifications) =>
                               setWizardData((previous) => ({
                                 ...previous,
@@ -1305,32 +1331,54 @@ programStructureName:
                 />
               )}
 
+{currentStep === 3 && (
+  <ProfileItemsStep
+    items={wizardData.items}
+    programDurationMinutes={Number(
+  normalizeDigits(
+    wizardData.specifications.duration
+  )
+)}
+    onChange={(items) =>
+      setWizardData((previous) => ({
+        ...previous,
+        items,
+      }))
+    }
+    onReset={async () => {
+      const planId =
+        wizardData.specifications.planId;
 
-              {currentStep === 3 && (
-                <ProfileItemsStep
-                  items={
-                    wizardData.items
-                  }
-                  onChange={(
-                    items
-                  ) =>
-                    setWizardData(
-                      (previous) => ({
-                        ...previous,
+      if (!planId || planId <= 0) {
+        throw new Error("شناسه برنامه معتبر نیست.");
+      }
 
-                        items,
-                      })
-                    )
-                  }
-                  onBack={() =>
-                    setCurrentStep(2)
-                  }
-                  onNext={() =>
-                    setCurrentStep(4)
-                  }
-                />
-              )}
+      const itemsResponse = await fetchJson(
+        `/api/base-info/plans/${planId}/items`
+      );
 
+      const refreshedItems = normalizeItems(
+        extractArray(itemsResponse, [
+          "items",
+          "Items",
+          "planItems",
+          "PlanItems",
+          "data",
+          "Data",
+          "result",
+          "Result",
+        ])
+      );
+
+      setWizardData((previous) => ({
+        ...previous,
+        items: refreshedItems,
+      }));
+    }}
+    onBack={() => setCurrentStep(2)}
+    onNext={() => setCurrentStep(4)}
+  />
+)}
 
               {currentStep === 4 && (
                 <ProfileExpertsStep
@@ -1339,6 +1387,13 @@ programStructureName:
                       .specifications
                       .hasExpert
                   }
+                   programDurationMinutes={
+                      Number(
+                        normalizeDigits(
+                          wizardData.specifications.duration
+                        )
+                      )
+                    }
                   experts={
                     wizardData.experts
                   }
@@ -1632,12 +1687,21 @@ function normalizeCrewMembers(
             "activityName",
             "ActivityName",
           ]
-        );
+   );
+// //test-crew
+// console.log("crew before:", {
+//   personnelId,
 
+//           personnelName,
 
+//           activityTypeId,
+//           activityTypeName,
+//           orginalItem: item,
+  
+// })
       if (
-        personnelId === null ||
-        !personnelName
+        personnelId === null
+        
       ) {
         return [];
       }
@@ -2372,50 +2436,69 @@ function normalizeClockTime(
     "00:00:00";
 }
 
-
 function formatJalaliDate(
   value: string
 ): string {
-  if (!value) {
-    return "";
-  }
-
-
-  const date =
-    new Date(
-      normalizeDigits(
-        value
-      )
-    );
-
-
   if (
-    Number.isNaN(
-      date.getTime()
-    )
+    typeof value !== "string" ||
+    !value.trim()
   ) {
     return "";
   }
 
+  const normalizedValue =
+    normalizeDigits(value.trim());
+
+  /*
+   * استخراج تاریخ تقویمی از ابتدای رشته
+   * بدون تبدیل رشته کامل به Date
+   */
+  const match =
+    normalizedValue.match(
+      /^(\d{4})-(\d{2})-(\d{2})/
+    );
+
+  if (!match) {
+    return "";
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const date = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day,
+      12,
+      0,
+      0
+    )
+  );
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return "";
+  }
 
   return new Intl.DateTimeFormat(
     "fa-IR-u-ca-persian",
     {
-      year:
-        "numeric",
-
-      month:
-        "2-digit",
-
-      day:
-        "2-digit",
-
-      timeZone:
-        "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "UTC",
     }
   ).format(date);
 }
-
 
 function parseJsonResponse(
   value: string

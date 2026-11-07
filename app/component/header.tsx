@@ -523,8 +523,7 @@ function makeNotice
     key: `forecast:${row.id}`,
     ...noticeDetails(row),
     label: "پیش‌بینی شما تأیید شد",
-    href: `/approved-forecasts?forecastId=$
-      {encodeURIComponent(row.id)}`,
+    href: `/approved-forecasts?forecastId=${encodeURIComponent(row.id)}`,
   };
 }
       
@@ -670,7 +669,7 @@ function InboxNotifications
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
       if (active || disposed ||
-         document.visibilityState === "hidden") 
+         document.visibilityState  === "hidden") 
          return;
       clearTimeout(timer);
       const controller = new AbortController();
@@ -733,24 +732,32 @@ if (profileRows !== null && !canCheckIssuedProfiles) {
         results.forEach((result, index) => {
           const source = sources[index];
           if (result.status === "fulfilled") {
-            result.value.forEach(row => {
-  const isApprovedForecast =
-    source.kind === "forecast" &&
-    ["Approved", "3"].includes(String(row.status));
+  //           result.value.forEach(row => {
+  // const isApprovedForecast =
+  //   source.kind === "forecast" &&
+  //   ["Approved", "3"].includes(String(row.status));
 
-  if (isApprovedForecast) {
-    if (!canCheckIssuedProfiles) return;
+  // const notice = makeNotice(row, source.kind, user);
 
-    const alreadyIssued = issuedForecastIds.has(
-      row.id.trim().toLowerCase()
-    );
+  // if (notice) next.push(notice);
 
-    if (alreadyIssued) return;
+  result.value.forEach(row => {
+  if (source.kind === "forecast") {
+    console.log("FORECAST NOTIFICATION DEBUG", {
+      userName: user.userName,
+      roles: user.roles,
+      rowId: row.id,
+      status: row.status,
+      createdByUserName: row.createdByUserName,
+      userCreatorName: row.userCreatorName,
+      ownRecord: ownRecord(row, user),
+    });
   }
 
   const notice = makeNotice(row, source.kind, user);
 
   if (notice) next.push(notice);
+
 });
             if (source.kind === "profile"
               && roleKey.split(",").some(

@@ -38,74 +38,29 @@ import type {
  * Providers:
  * رکوردهای ثبت‌شده توسط کاربر
  */
-export async function GET(
-  request: Request
-) {
+export async function GET(request: Request) {
   try {
-    const accessToken =
-      await getAccessToken();
-      if (
-  process.env.NODE_ENV ===
-  "development" &&
-  accessToken
-) {
-  const tokenPayload =
-    readJwtPayload(
-      accessToken
-    );
-
-  console.log(
-    "FORECAST ROUTE TOKEN:",
-    {
-      sub:
-        tokenPayload?.sub,
-
-      userName:
-        tokenPayload?.userName ??
-        tokenPayload?.unique_name,
-
-      roles:
-        tokenPayload?.role ??
-        tokenPayload?.roles,
-
-      networkIds:
-        tokenPayload?.networkIds,
-
-      networkGroupId:
-        tokenPayload?.networkGroupId,
-    }
-  );
-}
-
+    const accessToken = await getAccessToken();
 
     if (!accessToken) {
-      return jsonError(
-        "نشست کاربری معتبر نیست.",
-        401
+      return jsonError("نشست کاربری معتبر نیست.", 401);
+    }
+
+    const requestUrl = new URL(request.url);
+
+    // محدودیت ویژه فقط برای مدیر گروه اعمال می‌شود؛ رفتار سایر نقش‌ها
+    // دقیقاً از مسیر فعلی Backend عبور می‌کند.
+    if (isNetworkGroupManagerToken(accessToken)) {
+      return await getNetworkGroupManagerForecasts(
+        accessToken,
+        requestUrl
       );
     }
 
+    const backendUrl = new URL(
+      joinUrl(API_CONFIG.baseUrl, API_ENDPOINTS.forecasts.list)
+    );
 
-    const requestUrl =
-      new URL(
-        request.url
-      );
-
-
-    const backendUrl =
-      new URL(
-        joinUrl(
-          API_CONFIG.baseUrl,
-          API_ENDPOINTS
-            .forecasts.list
-        )
-      );
-
-
-    /*
-     * فقط پارامترهای مجاز مستند
-     * برای Backend ارسال می‌شوند.
-     */
     const allowedParameters = [
       "planId",
       "status",
@@ -115,238 +70,79 @@ export async function GET(
       "pageSize",
     ] as const;
 
-
-    for (
-      const parameterName of
-      allowedParameters
-    ) {
-      const parameterValue =
-        requestUrl.searchParams
-          .get(
-            parameterName
-          )
-          ?.trim();
-
+    for (const parameterName of allowedParameters) {
+      const parameterValue = requestUrl.searchParams
+        .get(parameterName)
+        ?.trim();
 
       if (parameterValue) {
-        backendUrl.searchParams.set(
-          parameterName,
-          parameterValue
-        );
+        backendUrl.searchParams.set(parameterName, parameterValue);
       }
     }
 
-
-    /*
-     * pageNumber و pageSize در
-     * Backend جدید اجباری هستند.
-     */
-    if (
-      !backendUrl.searchParams.has(
-        "pageNumber"
-      )
-    ) {
-      backendUrl.searchParams.set(
-        "pageNumber",
-        "1"
-      );
+    if (!backendUrl.searchParams.has("pageNumber")) {
+      backendUrl.searchParams.set("pageNumber", "1");
     }
 
-
-    if (
-      !backendUrl.searchParams.has(
-        "pageSize"
-      )
-    ) {
-      backendUrl.searchParams.set(
-        "pageSize",
-        "10"
-      );
+    if (!backendUrl.searchParams.has("pageSize")) {
+      backendUrl.searchParams.set("pageSize", "10");
     }
 
+    const backendResponse = await fetch(backendUrl.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    });
 
-    const backendResponse =
-      await fetch(
-        backendUrl.toString(),
-        {
-          method:
-            "GET",
-
-          headers: {
-            Accept:
-              "application/json",
-
-            Authorization:
-              `Bearer ${accessToken}`,
-          },
-
-          cache:
-            "no-store",
-        }
-      );
-
-
-    const responseText =
-      await backendResponse.text();
-
-
-    const responseData =
-      parseJsonResponse(
-        responseText
-      );
-      //test
-      console.log(
-  "FORECAST LIST BACKEND RESPONSE:",
-  {
-    backendUrl:
-      backendUrl.toString(),
-
-    status:
-      backendResponse.status,
-
-    pagination:
-      backendResponse.headers.get(
-        "Pagination"
-      ),
-
-    responseData,
-
-    extractedItemsCount:
-      getForecastItems(
-        responseData
-      )?.length,
-  }
-);
-
-
+    const responseText = await backendResponse.text();
+    const responseData = parseJsonResponse(responseText);
 
     if (!backendResponse.ok) {
       return NextResponse.json(
         {
           message:
-            getApiErrorMessage(
-              responseData
-            ) ??
-            (
-              "دریافت فهرست پیش‌بینی‌ها انجام نشد. " +
-              `کد پاسخ Backend: ${
-                backendResponse.status
-              }`
-            ),
-
-          /*
-           * برای مدیریت دقیق‌تر خطاها
-           * در Frontend حفظ می‌شود.
-           */
-          code:
-            getStringField(
-              responseData,
-              "code"
-            ),
-
-          details:
-            responseData ??
-            (
-              responseText.trim()
-                ? responseText
-                : null
-            ),
+            getApiErrorMessage(responseData) ??
+            `دریافت فهرست پیش‌بینی‌ها انجام نشد. کد پاسخ Backend: ${backendResponse.status}`,
+          code: getStringField(responseData, "code"),
+          details: responseData ?? (responseText.trim() ? responseText : null),
         },
-        {
-          status:
-            backendResponse.status,
-        }
+        { status: backendResponse.status }
       );
     }
 
-
-    /*
-     * طبق مستند، پاسخ اصلی Backend
-     * مستقیماً آرایه Forecast است.
-     *
-     * برای جلوگیری از خرابی در صورت
-     * Wrapper شدن پاسخ، ساختارهای
-     * متداول قبلی نیز پشتیبانی می‌شوند.
-     */
-    const forecasts =
-      getForecastItems(
-        responseData
-      );
-
+    const forecasts = getForecastItems(responseData);
 
     if (forecasts === null) {
-      console.error(
-        "Invalid forecast list response:",
-        {
-          backendUrl:
-            backendUrl.toString(),
-
-          status:
-            backendResponse.status,
-
-          response:
-            responseData ??
-            responseText,
-        }
-      );
-
-
       return NextResponse.json(
         {
-          message:
-            "فهرست پیش‌بینی‌ها در پاسخ وب‌سرویس پیدا نشد.",
-
-          details:
-            responseData ??
-            responseText,
+          message: "فهرست پیش‌بینی‌ها در پاسخ وب‌سرویس پیدا نشد.",
+          details: responseData ?? responseText,
         },
-        {
-          status: 502,
-        }
+        { status: 502 }
       );
     }
 
+    const pagination = getPaginationMetadata(
+      backendResponse,
+      backendUrl.searchParams,
+      forecasts.length
+    );
 
-    /*
-     * Backend اطلاعات Pagination را
-     * داخل Header برمی‌گرداند.
-     */
-    const pagination =
-      getPaginationMetadata(
-        backendResponse,
-        backendUrl.searchParams,
-        forecasts.length
-      );
-
-
-    const result:
-      ForecastListResponse = {
-      items:
-        forecasts,
-
+    const result: ForecastListResponse = {
+      items: forecasts,
       pagination,
     };
 
-
-    return NextResponse.json(
-      result,
-      {
-        status: 200,
-      }
-    );
+    return NextResponse.json(result, { status: 200 });
   } catch (error) {
-    console.error(
-      "Get forecasts route error:",
-      error
-    );
-
-
-    return jsonError(
-      "ارتباط با وب‌سرویس پیش‌بینی‌ها برقرار نشد.",
-      500
-    );
+    console.error("Get forecasts route error:", error);
+    return jsonError("ارتباط با وب‌سرویس پیش‌بینی‌ها برقرار نشد.", 500);
   }
 }
+
 /* POST /api/forecasts - ایجاد Forecast و ارسال اختیاری برای بررسی */
 export async function POST(request: Request) {
   try {
@@ -591,6 +387,250 @@ if (!createdForecast) {
 
     return jsonError("ارتباط با وب‌سرویس ایجاد Forecast برقرار نشد.", 500);
   }
+}
+
+/**
+ * بررسی نقش از روی Claimهای متداول JWT.
+ * مقدار توکن صرفاً برای تشخیص مسیر استفاده می‌شود؛ اعتبارسنجی توکن همچنان
+ * توسط Backend و درخواست دارای Bearer token انجام می‌شود.
+ */
+function isNetworkGroupManagerToken(token: string): boolean {
+  const payload = readJwtPayload(token);
+  if (!payload) return false;
+
+  const roleClaimKeys = [
+    "role",
+    "roles",
+    "http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+  ];
+
+  const roleValues: string[] = [];
+
+  for (const key of roleClaimKeys) {
+    const claim = payload[key];
+    if (typeof claim === "string") {
+      roleValues.push(...claim.split(","));
+    } else if (Array.isArray(claim)) {
+      roleValues.push(
+        ...claim.filter((value): value is string => typeof value === "string")
+      );
+    }
+  }
+
+  const normalizedRoles = roleValues.map((role) =>
+    role.trim().toLowerCase().replace(/[ _-]/g, "")
+  );
+
+  // هر دو نام متداول پشتیبانی می‌شوند؛ نقش‌های دیگر وارد این مسیر نمی‌شوند.
+  return normalizedRoles.some(
+    (role) => role === "networkgroupmanager" || role === "networkgroup"
+  );
+}
+
+/**
+ * مدیر گروه فقط PendingReview و Approved را می‌بیند.
+ * برای صحیح ماندن صفحه‌بندی، صفحات هر وضعیت از Backend خوانده می‌شوند،
+ * سپس ادغام و صفحه‌بندی در این Route انجام می‌شود.
+ */
+async function getNetworkGroupManagerForecasts(
+  accessToken: string,
+  requestUrl: URL
+): Promise<NextResponse> {
+  const requestedStatus = requestUrl.searchParams.get("status")?.trim();
+  const allowedStatuses = ["PendingReview", "Approved"] as const;
+
+  // اگر مدیر گروه وضعیت دیگری را انتخاب کند، هیچ رکوردی خارج از مجوز نمایش داده نمی‌شود.
+  if (requestedStatus && !allowedStatuses.includes(requestedStatus as (typeof allowedStatuses)[number])) {
+    return createEmptyForecastList(requestUrl);
+  }
+
+  const statuses: readonly string[] = requestedStatus
+    ? [requestedStatus]
+    : allowedStatuses;
+
+  const allForecasts: ForecastResponse[] = [];
+
+  for (const status of statuses) {
+    const result = await fetchAllForecastPagesForStatus(
+      accessToken,
+      requestUrl,
+      status
+    );
+
+    if (!result.ok) {
+      return NextResponse.json(result.body, { status: result.status });
+    }
+
+    allForecasts.push(...result.items);
+  }
+
+  // حذف تکراری‌ها و مرتب‌سازی پایدارتر قبل از صفحه‌بندی محلی.
+  const uniqueById = new Map<string, ForecastResponse>();
+  for (const forecast of allForecasts) {
+    if (
+      forecast.status === "PendingReview" ||
+      forecast.status === "Approved"
+    ) {
+      uniqueById.set(forecast.id, forecast);
+    }
+  }
+
+  const mergedForecasts = Array.from(uniqueById.values()).sort((a, b) => {
+    const dateA = Date.parse(a.createdDate || a.lastModifiedDate || "") || 0;
+    const dateB = Date.parse(b.createdDate || b.lastModifiedDate || "") || 0;
+    return dateB - dateA || a.id.localeCompare(b.id);
+  });
+
+  const pageNumber = toPositiveInteger(
+    requestUrl.searchParams.get("pageNumber"),
+    1
+  );
+  const pageSize = toPositiveInteger(
+    requestUrl.searchParams.get("pageSize"),
+    10
+  );
+  const totalCount = mergedForecasts.length;
+  const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / pageSize);
+  const startIndex = (pageNumber - 1) * pageSize;
+
+  const result: ForecastListResponse = {
+    items: mergedForecasts.slice(startIndex, startIndex + pageSize),
+    pagination: {
+      currentPage: pageNumber,
+      totalPages,
+      pageSize,
+      totalCount,
+      hasPrevious: pageNumber > 1 && totalPages > 0,
+      hasNext: pageNumber < totalPages,
+    },
+  };
+
+  return NextResponse.json(result, { status: 200 });
+}
+
+function createEmptyForecastList(requestUrl: URL): NextResponse {
+  const pageNumber = toPositiveInteger(
+    requestUrl.searchParams.get("pageNumber"),
+    1
+  );
+  const pageSize = toPositiveInteger(
+    requestUrl.searchParams.get("pageSize"),
+    10
+  );
+
+  const result: ForecastListResponse = {
+    items: [],
+    pagination: {
+      currentPage: pageNumber,
+      totalPages: 0,
+      pageSize,
+      totalCount: 0,
+      hasPrevious: false,
+      hasNext: false,
+    },
+  };
+
+  return NextResponse.json(result, { status: 200 });
+}
+
+async function fetchAllForecastPagesForStatus(
+  accessToken: string,
+  requestUrl: URL,
+  status: string
+): Promise<
+  | { ok: true; items: ForecastResponse[] }
+  | { ok: false; status: number; body: Record<string, unknown> }
+> {
+  const pageSize = 100;
+  const collected: ForecastResponse[] = [];
+  let pageNumber = 1;
+  let totalPages = Number.POSITIVE_INFINITY;
+  const maximumPages = 1000;
+
+  while (pageNumber <= totalPages && pageNumber <= maximumPages) {
+    const backendUrl = new URL(
+      joinUrl(API_CONFIG.baseUrl, API_ENDPOINTS.forecasts.list)
+    );
+
+    for (const parameterName of ["planId", "fromDate", "toDate"] as const) {
+      const parameterValue = requestUrl.searchParams.get(parameterName)?.trim();
+      if (parameterValue) backendUrl.searchParams.set(parameterName, parameterValue);
+    }
+
+    backendUrl.searchParams.set("status", status);
+    backendUrl.searchParams.set("pageNumber", String(pageNumber));
+    backendUrl.searchParams.set("pageSize", String(pageSize));
+
+    const response = await fetch(backendUrl.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    });
+
+    const responseText = await response.text();
+    const responseData = parseJsonResponse(responseText);
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        body: {
+          message:
+            getApiErrorMessage(responseData) ??
+            `دریافت فهرست پیش‌بینی‌ها انجام نشد. کد پاسخ Backend: ${response.status}`,
+          code: getStringField(responseData, "code"),
+          details: responseData ?? (responseText.trim() ? responseText : null),
+        },
+      };
+    }
+
+    const pageItems = getForecastItems(responseData);
+    if (pageItems === null) {
+      return {
+        ok: false,
+        status: 502,
+        body: {
+          message: "فهرست پیش‌بینی‌ها در پاسخ وب‌سرویس پیدا نشد.",
+          details: responseData ?? responseText,
+        },
+      };
+    }
+
+    collected.push(...pageItems);
+
+    const paginationHeader =
+      response.headers.get("Pagination") ?? response.headers.get("X-Pagination");
+
+    if (paginationHeader) {
+      const pagination = getPaginationMetadata(
+        response,
+        backendUrl.searchParams,
+        pageItems.length
+      );
+      totalPages = Math.max(0, pagination.totalPages);
+    } else {
+      // در نبود Header، ادامه فقط وقتی ممکن است که صفحه کاملاً پر باشد.
+      totalPages = pageItems.length >= pageSize ? pageNumber + 1 : pageNumber;
+    }
+
+    pageNumber += 1;
+  }
+
+  if (pageNumber <= totalPages && pageNumber > maximumPages) {
+    return {
+      ok: false,
+      status: 502,
+      body: {
+        message:
+          "تعداد صفحات فهرست پیش‌بینی‌ها بیش از حد مجاز است؛ برای جلوگیری از پاسخ ناقص، دریافت متوقف شد.",
+      },
+    };
+  }
+
+  return { ok: true, items: collected };
 }
 
 async function getAccessToken(): Promise<string | undefined> {

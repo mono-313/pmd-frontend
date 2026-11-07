@@ -692,18 +692,6 @@ function normalizeCrewMembers(
     }
 
 
-    if (!personnelName) {
-      return {
-        ok: false,
-
-        message:
-          `نام پرسنل ردیف ${
-            index + 1
-          } الزامی است.`,
-      };
-    }
-
-
     if (
       activityTypeId === null
     ) {
@@ -848,19 +836,6 @@ function normalizeProgramItems(
           } الزامی است.`,
       };
     }
-
-
-    if (!productionType) {
-      return {
-        ok: false,
-
-        message:
-          `نوع تولید آیتم ردیف ${
-            index + 1
-          } الزامی است.`,
-      };
-    }
-
 
     if (!isTimeSpan(duration)) {
       return {

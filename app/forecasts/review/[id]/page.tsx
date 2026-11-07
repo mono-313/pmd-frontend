@@ -14,6 +14,11 @@ import {
   XCircle,
 } from "lucide-react";
 
+import ProgramName from
+  "@/app/component/program/ProgramName";
+
+import NetworkName from "@/app/component/network/NetworkName";
+import NetworkGroupName from "@/app/component/network/NetworkGroupName";
 type Row = Record<string, unknown>;
 type ReviewAction = "approve" | "reject" | "return-for-edit";
 
@@ -72,8 +77,23 @@ export default function ForecastReviewDetailsPage() {
           );
         }
         const raw = extractForecast(responseData);
+        console.log("FORECAST DATE DEBUG:", {
+  rawBroadcastDate: raw?.broadcastDate,
+  parsedDate: raw?.broadcastDate
+    ? new Date(String(raw.broadcastDate)).toString()
+    : null,
+  utcDate: raw?.broadcastDate
+    ? new Date(String(raw.broadcastDate)).toISOString()
+    : null,
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+});
         if (!raw) throw new Error("اطلاعات پیش‌بینی در پاسخ سرور پیدا نشد.");
-        if (!cancelled) setForecast(normalizeForecast(raw, forecastId));
+       const normalizedForecast = normalizeForecast(raw, forecastId);
+
+if (!cancelled) {
+  setForecast(normalizedForecast);
+}
+
       } catch (cause) {
         if (!cancelled) {
           setError(
@@ -215,13 +235,20 @@ export default function ForecastReviewDetailsPage() {
           <SpecificationsGrid
             items={[
               {
-                label: "نام برنامه",
-                value:
-                  forecast.planName ||
-                  (forecast.planId !== null
-                    ? `برنامه شماره ${fa(forecast.planId)}`
-                    : "—"),
-              },
+  label: "نام برنامه",
+  value: (
+    <ProgramName
+      planId={forecast.planId}
+      networkId={forecast.networkId}
+      fallback={
+        forecast.planName ||
+        (forecast.planId !== null
+          ? `برنامه شماره ${fa(forecast.planId)}`
+          : "—")
+      }
+    />
+  ),
+},
               { label: "موضوع اصلی", value: display(forecast.mainTopic) },
               {
                 label: "وضعیت",
@@ -239,16 +266,32 @@ export default function ForecastReviewDetailsPage() {
               { label: "تاریخ پخش", value: jalali(forecast.broadcastDate) },
               { label: "دارای کارشناس", value: forecast.hasExpert ? "بله" : "خیر" },
               {
-                label: "شناسه شبکه",
-                value: forecast.networkId !== null ? fa(forecast.networkId) : "—",
-              },
-              {
-                label: "شناسه گروه برنامه‌ساز",
-                value:
-                  forecast.networkGroupId !== null
-                    ? fa(forecast.networkGroupId)
-                    : "—",
-              },
+  label: "شبکه",
+  value: (
+    <NetworkName
+      networkId={forecast.networkId}
+      fallback={
+        forecast.networkId !== null
+          ? `شبکه شماره ${fa(forecast.networkId)}`
+          : "—"
+      }
+    />
+  ),
+},
+{
+  label: "گروه برنامه‌ساز",
+  value: (
+    <NetworkGroupName
+      networkGroupId={forecast.networkGroupId}
+      networkId={forecast.networkId}
+      fallback={
+        forecast.networkGroupId !== null
+          ? `گروه برنامه‌ساز شماره ${fa(forecast.networkGroupId)}`
+          : "—"
+      }
+    />
+  ),
+},
             ]}
           />
         </DetailsSection>
@@ -531,24 +574,48 @@ function extractForecast(value: unknown): Row | null {
   return candidates.find((item): item is Row => record(item) && typeof item.id === "string") ?? null;
 }
 
-function normalizeForecast(v: Row, fallbackId: string): ViewForecast {
+
+function normalizeForecast(
+  v: Row,
+  fallbackId: string
+): ViewForecast {
   return {
     id: str(v.id) || fallbackId,
-    planId: num(v.planId),
-    planName: str(v.planName) || str(v.programName),
+
+    planId: num(v.planId ?? v.programId),
+
+    planName:
+      str(v.planName) ||
+      str(v.programName),
+
     networkId: num(v.networkId),
+
     networkGroupId: num(v.networkGroupId),
+
     episodeNumber: num(v.episodeNumber),
+
     broadcastDate: str(v.broadcastDate),
+
     mainTopic: str(v.mainTopic) || "—",
+
     hasExpert: bool(v.hasExpert),
+
     status: v.status,
+
     topicAxes: axes(v.topicAxes),
+
     experts: experts(v),
-    createdByUserName: str(v.createdByUserName) || str(v.createdByName),
-    createdDate: str(v.createdDate) || str(v.createdAt),
+
+    createdByUserName:
+      str(v.createdByUserName) ||
+      str(v.createdByName),
+
+    createdDate:
+      str(v.createdDate) ||
+      str(v.createdAt),
   };
 }
+
 
 function axes(value: unknown): ViewForecast["topicAxes"] {
   if (!Array.isArray(value)) return [];
@@ -606,8 +673,42 @@ function successMessage(action: ReviewAction) {
 
 function jalali(value: string) {
   if (!value) return "—";
-  const date = new Date(normalizeDigits(value));
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fa-IR-u-ca-persian", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "UTC" }).format(date);
+
+  const normalized = normalizeDigits(value).trim();
+
+  // استخراج بخش تاریخ بدون دخالت منطقه زمانی
+  const match = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})/
+  );
+
+  if (!match) return value;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const date = new Date(
+    Date.UTC(year, month - 1, day, 12)
+  );
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    "fa-IR-u-ca-persian",
+    {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: "UTC",
+    }
+  ).format(date);
 }
 
 function jalaliDateTime(value: string) {

@@ -80,6 +80,13 @@ export const NAVIGATION_ITEMS:
 
     children: [
       {
+        title: "صدور شناسنامه",
+        href: "/program-profiles/issue",
+        permission:
+          PERMISSIONS.PROFILE_VIEW,
+      },
+
+      {
         title: "لیست شناسنامه‌ها",
         href: "/program-profiles",
         permission:

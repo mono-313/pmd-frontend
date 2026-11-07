@@ -1270,9 +1270,9 @@ function handleProfileIssued(
                                 className="
                                   absolute
                                   left-0
-                                  top-full
-                                  z-30
-                                  mt-1
+                                  bottom-full
+                                  z-50
+                                  mb-1
                                   w-56
                                   overflow-hidden
                                   rounded-xl

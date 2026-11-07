@@ -91,106 +91,141 @@ export default function ForecastListPage() {
   ] = useState("");
 
 
-  const loadForecasts =
-    useCallback(
-      async (
-        pageNumber: number
-      ) => {
-        try {
-          setIsLoading(true);
-          setError("");
+const [sortField, setSortField] = useState<
+  "createdDate" | "broadcastDate"
+>("createdDate");
 
+const [sortDirection, setSortDirection] = useState<
+  "asc" | "desc"
+>("desc");
 
-          const query =
-            new URLSearchParams();
+const loadForecasts = useCallback(
+  async (pageNumber: number) => {
+    try {
+      setIsLoading(true);
+      setError("");
 
-          query.set(
-            "pageNumber",
-            String(pageNumber)
-          );
+      const pageSize = 10;
+      const allItems: ForecastResponse[] = [];
 
-          query.set(
-            "pageSize",
-            "10"
-          );
+      let totalPages = 1;
 
+      // دریافت تمام صفحات از API
+      for (
+        let currentPage = 1;
+        currentPage <= totalPages;
+        currentPage++
+      ) {
+        const query = new URLSearchParams();
 
-          if (selectedStatus) {
-            query.set(
-              "status",
-              selectedStatus
-            );
-          }
+        query.set("pageNumber", String(currentPage));
+        query.set("pageSize", String(pageSize));
 
-
-          const response =
-            await fetch(
-              `/api/forecasts?${query.toString()}`,
-              {
-                method: "GET",
-
-                cache: "no-store",
-              }
-            );
-
-
-          const responseText =
-            await response.text();
-
-          const responseData =
-            parseJsonResponse(
-              responseText
-            );
-
-
-          if (!response.ok) {
-            throw new Error(
-              getMessage(
-                responseData
-              ) ??
-              `دریافت فهرست انجام نشد. کد پاسخ: ${response.status}`
-            );
-          }
-
-
-          if (
-            !isForecastListResponse(
-              responseData
-            )
-          ) {
-            throw new Error(
-              "ساختار پاسخ فهرست پیش‌بینی‌ها معتبر نیست."
-            );
-          }
-
-
-          setForecasts(
-            responseData.items
-          );
-
-          setPagination(
-            responseData.pagination
-          );
-        } catch (loadError) {
-          setForecasts([]);
-
-          setPagination(
-            initialPagination
-          );
-
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "دریافت فهرست انجام نشد."
-          );
-        } finally {
-          setIsLoading(false);
+        if (selectedStatus) {
+          query.set("status", selectedStatus);
         }
-      },
-      [
-        selectedStatus,
-      ]
-    );
+
+        const response = await fetch(
+          `/api/forecasts?${query.toString()}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const responseText = await response.text();
+
+        const responseData = parseJsonResponse(
+          responseText
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            getMessage(responseData) ??
+              `دریافت فهرست انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        if (!isForecastListResponse(responseData)) {
+          throw new Error(
+            "ساختار پاسخ فهرست پیش‌بینی‌ها معتبر نیست."
+          );
+        }
+
+        // تعداد صفحات از پاسخ صفحه اول مشخص می‌شود.
+        if (currentPage === 1) {
+          totalPages = Math.max(
+            responseData.pagination.totalPages,
+            1
+          );
+        }
+
+        allItems.push(...responseData.items);
+      }
+
+      // مرتب‌سازی تمام پیش‌بینی‌ها بر اساس تاریخ ثبت
+      const sortedItems = [...allItems].sort(
+        (a, b) => {
+          const dateA = new Date(a.createdDate).getTime();
+          const dateB = new Date(b.createdDate).getTime();
+
+          const safeDateA = Number.isNaN(dateA) ? 0 : dateA;
+          const safeDateB = Number.isNaN(dateB) ? 0 : dateB;
+
+          return safeDateB - safeDateA;
+        }
+      );
+
+      // محاسبه صفحه‌بندی در Frontend
+      const calculatedTotalPages = Math.ceil(
+        sortedItems.length / pageSize
+      );
+
+      const safeTotalPages = Math.max(
+        calculatedTotalPages,
+        1
+      );
+
+      const currentPage = Math.min(
+        Math.max(pageNumber, 1),
+        safeTotalPages
+      );
+
+      const startIndex = (currentPage - 1) * pageSize;
+
+      // نمایش فقط ۱۰ رکورد صفحه انتخاب‌شده
+      setForecasts(
+        sortedItems.slice(
+          startIndex,
+          startIndex + pageSize
+        )
+      );
+
+      setPagination({
+        totalCount: sortedItems.length,
+        currentPage,
+        pageSize,
+        totalPages: safeTotalPages,
+        hasPrevious: currentPage > 1,
+        hasNext: currentPage < safeTotalPages,
+      });
+
+    } catch (loadError) {
+      setForecasts([]);
+      setPagination(initialPagination);
+
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "دریافت فهرست انجام نشد."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  },
+  [selectedStatus]
+);
+
 
 
     
@@ -328,6 +363,7 @@ export default function ForecastListPage() {
 useEffect(() => {
   void loadPrograms();
 }, [loadPrograms]);
+
 
 
   return (
