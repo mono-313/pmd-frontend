@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useMemo,
   useEffect,
   useRef,
   useState,
@@ -28,33 +27,6 @@ import type {
 import ForecastActions from
   "@/app/component/forecast/forecast-actions";
 
-import DatePicker from "react-multi-date-picker";
-import DateObject from "react-date-object";
-import persian from "react-date-object/calendars/persian";
-import persianFa from "react-date-object/locales/persian_fa";
-import gregorian from "react-date-object/calendars/gregorian";
-import gregorianEn from "react-date-object/locales/gregorian_en";
-
-type ListForecast = ForecastResponse & { networkId: number; createdDate?: string };
-const filterClass = "h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm outline-none focus:border-[#007fcf]";
-function dayKey(value: unknown): string {
-  if (typeof value !== "string") return "";
-  const match = /^(\d{4}-\d{2}-\d{2})(?:T|$)/.exec(value);
-  if (!match) return "";
-  const d = new Date(match[1] + "T12:00:00Z");
-  return Number.isFinite(d.getTime()) && d.toISOString().slice(0,10) === match[1] ? match[1] : "";
-}
-function pickerDay(value: DateObject | null): string {
-  return value ? new DateObject(value).convert(gregorian, gregorianEn).format("YYYY-MM-DD") : "";
-}
-function searchText(value: string): string {
-  return normalizeDigits(value).replace(/ي/g,"ی").replace(/ك/g,"ک")
-    .replace(/[\u064B-\u065F\u0670]/g,"").replace(/\u200c/g," ")
-    .replace(/\s+/g," ").trim().toLowerCase();
-}
-function programKey(networkId: number, planId: number): string {
-  return networkId + ":" + planId;
-}
 const initialPagination:
   PaginationMetadata = {
   totalCount: 0,
@@ -82,113 +54,317 @@ export default function ForecastListPage() {
       null
     );
 
-  const [allForecasts, setAllForecasts] = useState<ListForecast[]>([]);
-  const [programNames, setProgramNames] = useState<Record<string,string>>({});
-  const [selectedStatus, setSelectedStatus] = useState<ForecastStatus | "">("");
-  const [selectedProgram, setSelectedProgram] = useState("");
-  const [createdFrom, setCreatedFrom] = useState<DateObject | null>(null);
-  const [createdTo, setCreatedTo] = useState<DateObject | null>(null);
-  const [broadcastFrom, setBroadcastFrom] = useState<DateObject | null>(null);
-  const [broadcastTo, setBroadcastTo] = useState<DateObject | null>(null);
-  const [topic, setTopic] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [programWarning, setProgramWarning] = useState("");
-  const controllerRef = useRef<AbortController | null>(null);
+  const [
+    forecasts,
+    setForecasts,
+  ] = useState<ForecastResponse[]>([]);
 
-  const loadForecasts = useCallback(async (_pageNumber = 1) => {
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 120000);
-    setIsLoading(true); setError(""); setProgramWarning("");
+
+  const [
+  programNames,
+  setProgramNames,
+  ] = useState<Record<number, string>>({});
+
+
+  const [
+    pagination,
+    setPagination,
+  ] = useState<PaginationMetadata>(
+    initialPagination
+  );
+
+  const [
+    selectedStatus,
+    setSelectedStatus,
+  ] = useState<
+    ForecastStatus | ""
+  >("");
+
+  const [
+    isLoading,
+    setIsLoading,
+  ] = useState(true);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+
+const [sortField, setSortField] = useState<
+  "createdDate" | "broadcastDate"
+>("createdDate");
+
+const [sortDirection, setSortDirection] = useState<
+  "asc" | "desc"
+>("desc");
+
+const loadForecasts = useCallback(
+  async (pageNumber: number) => {
     try {
-      const collected = new Map<string,ListForecast>();
-      let complete = false;
-      // تا صفحهٔ خالی: metadata جایگزین Route ممکن است totalPages=1 باشد.
-      for (let page = 1; page <= 200; page++) {
-        const response = await fetch(`/api/forecasts?pageNumber=${page}&pageSize=100`, {cache:"no-store", signal:controller.signal});
-        const data = parseJsonResponse(await response.text());
-        if (!response.ok) throw new Error(getMessage(data) || "دریافت پیش‌بینی‌ها ناموفق بود.");
-        if (!isForecastListResponse(data)) throw new Error("ساختار فهرست پیش‌بینی‌ها معتبر نیست.");
-        if (!data.items.length) { complete = true; break; }
-        let added = 0;
-        for (const raw of data.items) {
-          const item = raw as ListForecast;
-          if (!item.id) throw new Error("شناسهٔ پیش‌بینی در پاسخ موجود نیست.");
-          if (!collected.has(item.id)) added++;
-          collected.set(item.id,item);
-        }
-        if (!added) throw new Error("صفحه‌بندی سرویس تکراری است؛ دریافت فهرست کامل نشد.");
-      }
-      if (!complete) throw new Error("حجم فهرست از سقف دریافت بیشتر است؛ سرویس جست‌وجوی سمت سرور لازم است.");
-      const records = [...collected.values()];
-      const names: Record<string,string> = {};
-      const networks = [...new Set(records.map(r=>Number(r.networkId)).filter(n=>Number.isInteger(n)&&n>0))];
-      const failed: number[] = [];
-      // حداکثر چهار درخواست همزمان؛ هر شبکه فقط یک بار دریافت می‌شود.
-      let next = 0;
-      await Promise.all(Array.from({length:Math.min(4,networks.length)},async()=>{
-        while (next < networks.length) {
-          const networkId = networks[next++];
-          try {
-            const res = await fetch(`/api/programs?networkId=${networkId}`,{cache:"no-store",signal:controller.signal});
-            const data = parseJsonResponse(await res.text());
-            if (!res.ok || !findProgramsArray(data)) throw new Error("نام برنامه دریافت نشد");
-            for (const p of extractPrograms(data)) names[programKey(networkId,p.id)] = p.name;
-          } catch { if (controller.signal.aborted) throw new Error("دریافت لغو شد"); failed.push(networkId); }
-        }
-      }));
-      if (controllerRef.current !== controller) return;
-      controller.signal.throwIfAborted();
-      setAllForecasts(records); setProgramNames(names);
-      if (failed.length) setProgramWarning("نام برنامه‌های بعضی شبکه‌ها دریافت نشد؛ موقتاً شمارهٔ برنامه نمایش داده می‌شود. دوباره به‌روزرسانی کنید.");
-    } catch (cause) {
-      if (controllerRef.current !== controller) return;
-      setAllForecasts([]); setProgramNames({});
-      setError(controller.signal.aborted ? "زمان دریافت اطلاعات به پایان رسید؛ دوباره تلاش کنید." : cause instanceof Error ? cause.message : "دریافت اطلاعات ناموفق بود.");
-    } finally {
-      clearTimeout(timeout);
-      if (controllerRef.current === controller) setIsLoading(false);
-    }
-  },[]);
-  useEffect(()=>{void loadForecasts(); return ()=>{controllerRef.current?.abort();controllerRef.current=null;};},[loadForecasts]);
-  useEffect(()=>{setFocusedForecastId(new URLSearchParams(window.location.search).get("focusId")?.trim() || "");},[]);
+      setIsLoading(true);
+      setError("");
 
-  const from = pickerDay(createdFrom), to = pickerDay(createdTo);
-  const broadcastStart = pickerDay(broadcastFrom), broadcastEnd = pickerDay(broadcastTo);
-  const invalidDates = Boolean((from && to && from > to) || (broadcastStart && broadcastEnd && broadcastStart > broadcastEnd));
-  const filtered = useMemo(()=> invalidDates ? [] : allForecasts.filter(f=>{
-    const registered = dayKey(f.createdDate), broadcast = dayKey(f.broadcastDate);
-    return (!selectedStatus || f.status === selectedStatus) &&
-      (!selectedProgram || programKey(f.networkId,f.planId) === selectedProgram) &&
-      (!from || Boolean(registered && registered >= from)) &&
-      (!to || Boolean(registered && registered <= to)) &&
-      (!broadcastStart || Boolean(broadcast && broadcast >= broadcastStart)) &&
-      (!broadcastEnd || Boolean(broadcast && broadcast <= broadcastEnd)) &&
-      (!searchText(topic) || searchText(f.mainTopic || "").includes(searchText(topic)));
-  }),[allForecasts,selectedStatus,selectedProgram,from,to,broadcastStart,broadcastEnd,topic,invalidDates]);
-  const programOptions = useMemo(()=>[...new Map(allForecasts.map(f=>{
-    const id = programKey(f.networkId,f.planId);
-    return [id,{id,name:getProgramName(programNames,f.planId,f.networkId)}] as const;
-  })).values()].sort((a,b)=>a.name.localeCompare(b.name,"fa")),[allForecasts,programNames]);
-  useEffect(()=>{setCurrentPage(1);},[selectedStatus,selectedProgram,from,to,broadcastStart,broadcastEnd,topic]);
-  const totalPages = Math.max(1,Math.ceil(filtered.length/10));
-  const effectivePage = Math.min(currentPage,totalPages);
-  const pagination = {...initialPagination,currentPage:effectivePage,totalCount:filtered.length,totalPages,pageSize:10,hasPrevious:effectivePage>1,hasNext:effectivePage<totalPages};
-  const forecasts = filtered.slice((effectivePage-1)*10,effectivePage*10);
-  useEffect(()=>{
-    if (isLoading || !focusedForecastId) return;
-    const index = filtered.findIndex(f=>f.id===focusedForecastId);
-    if(index>=0) setCurrentPage(Math.floor(index/10)+1);
-  },[filtered,focusedForecastId,isLoading]);
-  useEffect(()=>{
-    if(isLoading || !forecasts.some(f=>f.id===focusedForecastId)) return;
-    const frame=window.requestAnimationFrame(()=>{focusedRowRef.current?.scrollIntoView({behavior:"smooth",block:"center"});focusedRowRef.current?.focus({preventScroll:true});});
-    return ()=>window.cancelAnimationFrame(frame);
-  },[effectivePage,filtered,focusedForecastId,isLoading]);
-  function resetFilters() {setCreatedFrom(null);setCreatedTo(null);setBroadcastFrom(null);setBroadcastTo(null);setSelectedProgram("");setSelectedStatus("");setTopic("");setCurrentPage(1);}
+      const pageSize = 10;
+      const allItems: ForecastResponse[] = [];
+
+      let totalPages = 1;
+
+      // دریافت تمام صفحات از API
+      for (
+        let currentPage = 1;
+        currentPage <= totalPages;
+        currentPage++
+      ) {
+        const query = new URLSearchParams();
+
+        query.set("pageNumber", String(currentPage));
+        query.set("pageSize", String(pageSize));
+
+        if (selectedStatus) {
+          query.set("status", selectedStatus);
+        }
+
+        const response = await fetch(
+          `/api/forecasts?${query.toString()}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+        const responseText = await response.text();
+
+        const responseData = parseJsonResponse(
+          responseText
+        );
+
+        if (!response.ok) {
+          throw new Error(
+            getMessage(responseData) ??
+              `دریافت فهرست انجام نشد. کد پاسخ: ${response.status}`
+          );
+        }
+
+        if (!isForecastListResponse(responseData)) {
+          throw new Error(
+            "ساختار پاسخ فهرست پیش‌بینی‌ها معتبر نیست."
+          );
+        }
+
+        // تعداد صفحات از پاسخ صفحه اول مشخص می‌شود.
+        if (currentPage === 1) {
+          totalPages = Math.max(
+            responseData.pagination.totalPages,
+            1
+          );
+        }
+
+        allItems.push(...responseData.items);
+      }
+
+      // مرتب‌سازی تمام پیش‌بینی‌ها بر اساس تاریخ ثبت
+      const sortedItems = [...allItems].sort(
+        (a, b) => {
+          const dateA = new Date(a.createdDate).getTime();
+          const dateB = new Date(b.createdDate).getTime();
+
+          const safeDateA = Number.isNaN(dateA) ? 0 : dateA;
+          const safeDateB = Number.isNaN(dateB) ? 0 : dateB;
+
+          return safeDateB - safeDateA;
+        }
+      );
+
+      // محاسبه صفحه‌بندی در Frontend
+      const calculatedTotalPages = Math.ceil(
+        sortedItems.length / pageSize
+      );
+
+      const safeTotalPages = Math.max(
+        calculatedTotalPages,
+        1
+      );
+
+      const currentPage = Math.min(
+        Math.max(pageNumber, 1),
+        safeTotalPages
+      );
+
+      const startIndex = (currentPage - 1) * pageSize;
+
+      // نمایش فقط ۱۰ رکورد صفحه انتخاب‌شده
+      setForecasts(
+        sortedItems.slice(
+          startIndex,
+          startIndex + pageSize
+        )
+      );
+
+      setPagination({
+        totalCount: sortedItems.length,
+        currentPage,
+        pageSize,
+        totalPages: safeTotalPages,
+        hasPrevious: currentPage > 1,
+        hasNext: currentPage < safeTotalPages,
+      });
+
+    } catch (loadError) {
+      setForecasts([]);
+      setPagination(initialPagination);
+
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "دریافت فهرست انجام نشد."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  },
+  [selectedStatus]
+);
+
+
+
+    
+
+
+
+  useEffect(() => {
+    loadForecasts(1);
+  }, [
+    loadForecasts,
+  ]);
+
+
+  useEffect(() => {
+    const query =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    setFocusedForecastId(
+      query.get("focusId")?.trim() ??
+        ""
+    );
+  }, []);
+
+
+  useEffect(() => {
+    if (
+      isLoading ||
+      !focusedForecastId ||
+      !forecasts.some(
+        (forecast) =>
+          forecast.id ===
+          focusedForecastId
+      )
+    ) {
+      return;
+    }
+
+    const frameId =
+      window.requestAnimationFrame(
+        () => {
+          focusedRowRef.current
+            ?.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+
+          focusedRowRef.current
+            ?.focus({
+              preventScroll: true,
+            });
+        }
+      );
+
+    return () =>
+      window.cancelAnimationFrame(
+        frameId
+      );
+  }, [
+    forecasts,
+    focusedForecastId,
+    isLoading,
+  ]);
+
+  const loadPrograms =
+  useCallback(async () => {
+    try {
+      const response =
+        await fetch(
+          "/api/programs",
+          {
+            method: "GET",
+
+            headers: {
+              Accept:
+                "application/json",
+            },
+
+            cache: "no-store",
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      const responseData =
+        parseJsonResponse(
+          responseText
+        );
+
+      if (!response.ok) {
+        throw new Error(
+          getMessage(
+            responseData
+          ) ??
+          `دریافت برنامه‌ها انجام نشد. کد پاسخ: ${response.status}`
+        );
+      }
+
+      const programs =
+        extractPrograms(
+          responseData
+        );
+
+      const nextProgramNames:
+        Record<number, string> = {};
+
+      programs.forEach(
+        (program) => {
+          nextProgramNames[
+            program.id
+          ] = program.name;
+        }
+      );
+
+      setProgramNames(
+        nextProgramNames
+      );
+    } catch (programsError) {
+      console.error(
+        "Load programs error:",
+        programsError
+      );
+
+      /*
+       * خطای برنامه‌ها نباید باعث شود
+       * کل جدول پیش‌بینی‌ها نمایش داده نشود.
+       */
+      setProgramNames({});
+    }
+  }, []);
+
+
+useEffect(() => {
+  void loadPrograms();
+}, [loadPrograms]);
+
+
 
   return (
     <main
@@ -245,109 +421,7 @@ export default function ForecastListPage() {
               gap-3
             "
           >
-            <button
-              type="button"
-              onClick={() =>
-                loadForecasts(
-                  pagination.currentPage
-                )
-              }
-              disabled={
-                isLoading
-              }
-              className="
-                flex h-11
-                items-center
-                gap-2
-                rounded-lg
-                border
-                border-gray-300
-                bg-white
-                px-4
-                text-gray-700
-                hover:bg-gray-50
-                disabled:opacity-60
-              "
-            >
-              <RefreshCw
-                size={17}
-              />
-
-              بروزرسانی
-            </button>
-          </div>
-        </header>
-
-
-        <section aria-label="فیلتر پیش‌بینی‌ها" 
-        className="mb-5 rounded-xl border
-         border-gray-200 
-         bg-white p-5">
-          <div className="grid gap-4
-           sm:grid-cols-2 
-           lg:grid-cols-4">
-<div><label htmlFor="created-from"
- className="mb-2 block text-sm">از تاریخ ثبت</label>
- <DatePicker id="created-from" value={createdFrom} 
- onChange={v=>setCreatedFrom(v as DateObject | null)} 
- calendar={persian} locale={persianFa} format="YYYY/MM/DD" 
- editable={false} containerStyle={{width:"100%"}} 
- inputClass={filterClass} 
- calendarPosition="bottom-right"/>
- </div>
-<div><label htmlFor="created-to" 
-className="mb-2 block text-sm">تا تاریخ ثبت</label>
-<DatePicker id="created-to" value={createdTo} 
-onChange={v=>setCreatedTo(v as DateObject | null)} 
-calendar={persian} locale={persianFa} 
-format="YYYY/MM/DD" editable={false} 
-containerStyle={{width:"100%"}} 
-inputClass={filterClass} 
- calendarPosition="bottom-right"/>
- </div>
-<div><label htmlFor="broadcast-from" 
-className="mb-2 block text-sm">از تاریخ پخش</label>
-<DatePicker id="broadcast-from" 
-value={broadcastFrom} 
-onChange={v=>setBroadcastFrom(v as DateObject | null)} 
-calendar={persian} locale={persianFa} 
-format="YYYY/MM/DD" editable={false} 
-containerStyle={{width:"100%"}} 
-inputClass={filterClass} 
-calendarPosition="bottom-right"/>
-</div>
-
-<div><label htmlFor="broadcast-to"
- className="mb-2 block text-sm">تا تاریخ پخش</label>
- <DatePicker id="broadcast-to" 
- value={broadcastTo} 
- onChange={v=>setBroadcastTo(v as DateObject | null)} 
- calendar={persian} 
- locale={persianFa} 
- format="YYYY/MM/DD" 
- editable={false} 
- containerStyle={{width:"100%"}} 
- inputClass={filterClass} 
-  calendarPosition="bottom-right"/>
-  </div>
-<div><label htmlFor="program-filter"
- className="mb-2 block
-  text-sm">نام برنامه</label>
-  <select id="program-filter" 
-  className={filterClass} 
-  value={selectedProgram} 
-  onChange={e=>setSelectedProgram(e.target.value)}>
-    <option value="">همه برنامه‌ها</option>
-    {programOptions.map(p=><option key={p.id}
-     value={p.id}>{p.name}</option>)}</select>
-     </div>
-<div>
-  <label className="mb-2
-                       block
-                       text-sm"
-              htmlFor="status-filter">وضعیت
-      </label>
-            <select id="status-filter"
+            <select
               value={
                 selectedStatus
               }
@@ -395,45 +469,40 @@ calendarPosition="bottom-right"/>
             </select>
 
 
-</div>
-<div className="sm:col-span-2">
-  <label htmlFor="topic-filter" 
-  className="mb-2 block text-sm">موضوع اصلی</label>
-  <input id="topic-filter" 
-  className={filterClass} 
-  value={topic} 
-  onChange={e=>setTopic(e.target.value)} 
-  placeholder="موضوع را جستجو کنید" 
-  type="search"/>
-  </div>
-</div>
-<div className="mt-4 
-      flex items-center
-      justify-between 
-      gap-3">
-        <p className="text-xs text-gray-500"
-        >فیلترها هم‌زمان اعمال می‌شوند؛ تاریخ ابتدا و
-         انتها نیز در نتایج محاسبه می‌شود.
-         </p>
-        <button type="button" 
-        onClick={resetFilters} 
-        className={paginationButtonClass}>پاک‌کردن فیلترها</button>
-        </div>
-{invalidDates && 
-<p role="alert" 
-className="mt-3 text-sm text-red-600"
->تاریخ شروع نباید بعد از تاریخ پایان باشد.
-</p>}
-</section>
-{programWarning && 
-<p role="status" 
-className="mb-4 rounded-lg
- bg-amber-50 p-3 
- text-sm 
- text-amber-800">
-  {programWarning}
-  </p>
-  }
+            <button
+              type="button"
+              onClick={() =>
+                loadForecasts(
+                  pagination.currentPage
+                )
+              }
+              disabled={
+                isLoading
+              }
+              className="
+                flex h-11
+                items-center
+                gap-2
+                rounded-lg
+                border
+                border-gray-300
+                bg-white
+                px-4
+                text-gray-700
+                hover:bg-gray-50
+                disabled:opacity-60
+              "
+            >
+              <RefreshCw
+                size={17}
+              />
+
+              بروزرسانی
+            </button>
+          </div>
+        </header>
+
+
         {error && (
           <div
             className="
@@ -537,7 +606,7 @@ className="mb-4 rounded-lg
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="
                         py-16
                         text-center
@@ -566,7 +635,7 @@ className="mb-4 rounded-lg
                 ) : forecasts.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="
                         py-16
                         text-center
@@ -648,14 +717,12 @@ className="mb-4 rounded-lg
                             "
                             title={getProgramName(
                               programNames,
-                              forecast.planId,
-                              forecast.networkId
+                              forecast.planId
                             )}
                           >
                             {getProgramName(
                               programNames,
-                              forecast.planId,
-                              forecast.networkId
+                              forecast.planId
                             )}
                           </span>
                         </td>
@@ -781,7 +848,10 @@ className="mb-4 rounded-lg
               <button
                 type="button"
                 onClick={() =>
-                  setCurrentPage(pagination.currentPage - 1)
+                  loadForecasts(
+                    pagination.currentPage -
+                      1
+                  )
                 }
                 disabled={
                   isLoading ||
@@ -819,7 +889,10 @@ className="mb-4 rounded-lg
               <button
                 type="button"
                 onClick={() =>
-                  setCurrentPage(pagination.currentPage + 1)
+                  loadForecasts(
+                    pagination.currentPage +
+                      1
+                  )
                 }
                 disabled={
                   isLoading ||
@@ -1102,9 +1175,8 @@ function normalizeProgram(
 
 function getProgramName(
   programNames:
-    Record<string, string>,
-  planId: unknown,
-  networkId: number
+    Record<number, string>,
+  planId: unknown
 ): string {
   const normalizedPlanId =
     readNumericValue(planId);
@@ -1115,7 +1187,7 @@ function getProgramName(
 
   return (
     programNames[
-      programKey(networkId,normalizedPlanId)
+      normalizedPlanId
     ] ??
     `برنامه شماره ${normalizedPlanId}`
   );

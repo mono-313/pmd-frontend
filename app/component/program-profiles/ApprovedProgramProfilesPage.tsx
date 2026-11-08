@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import Link from "next/link";
-
+import ProgramName from "@/app/component/program/ProgramName";
 import {
   AlertCircle,
   Award,
@@ -195,15 +195,14 @@ export default function ApprovedProgramProfilesPage() {
             ];
 
           const approvedProfiles =
-            uniqueProfiles
-              .filter(
-                (profile) =>
-                  profile.status ===
-                  50
-              )
-              .sort(
-                compareProfilesDescending
-              );
+  uniqueProfiles
+    .filter(
+      (profile) =>
+        Number(profile.status) === 50
+    )
+    .sort(
+      compareProfilesDescending
+    );
 
           setProfiles(
             approvedProfiles
@@ -704,8 +703,11 @@ export default function ApprovedProgramProfilesPage() {
                               </td>
 
                               <td className={cellClass}>
-                                {profile.programName ||
-                                  `برنامه شماره ${profile.planId}`}
+                                <ProgramName
+                                  planId={profile.planId}
+                                  networkId={profile.networkId}
+                                  fallback={`برنامه شماره ${profile.planId}`}
+                                />
                               </td>
 
                               <td
@@ -1042,17 +1044,15 @@ function compareProfilesDescending(
 
 
 function isProgramProfile(
-  value:
-    unknown
+  value: unknown
 ): value is ProgramProfileResponse {
   return (
-    isRecord(
-      value
-    ) &&
-    typeof value.id ===
-      "string" &&
-    typeof value.status ===
-      "string"
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    (
+      typeof value.status === "string" ||
+      typeof value.status === "number"
+    )
   );
 }
 

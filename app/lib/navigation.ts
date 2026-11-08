@@ -122,9 +122,9 @@ export const NAVIGATION_ITEMS:
       },
       {
         title: "گزارش شناسنامه‌ها",
-        href: "/reports/program-profiles",
+        href: "/reports/program-profile",
         permission: PERMISSIONS.PROFILE_VIEW,
-        disabled: true,
+        // disabled: true,
       },
       {
         title: "گزارش موضوعی شناسنامه",
